@@ -1,0 +1,43 @@
+---
+description: FastAPI バックエンドのレイヤ責務と Python 規約
+globs: backend/**/*.py
+alwaysApply: false
+---
+
+# Backend（FastAPI）
+
+## パッケージ構成
+
+- `app/api/` … ルーター・HTTP 入出力のみ。Fat router にしない。
+- `app/services/` … 取込・分類・通知・集計などの業務ロジック。
+- `app/models/` … SQLAlchemy モデル。
+- `app/schemas/` … Pydantic スキーマ（リクエスト/レスポンス）。
+- `app/core/` … 設定、DB セッション、認証ヘルパーなど横断関心事。
+
+新規エンドポイントは `app/api/` にルートを追加し、複雑な処理は `app/services/` に切り出す。
+
+## 実装メモ
+
+- DB 利用時は `app.core.database` の `get_db` パターンに合わせる。
+- 依存はプロジェクトルートからの相対ではなく、`app.*` の絶対インポートを使う（例: `from app.schemas import ...`）。
+
+## Alembic（スキーマ変更）
+
+- 接続 URL は環境変数 `DATABASE_URL`（`backend/.env` を推奨）。`backend` をカレントにして実行する。
+- 適用: `python -m alembic upgrade head`
+- モデル変更後のリビジョン生成: `python -m alembic revision --autogenerate -m "説明"` → 生成 SQL をレビューしてからコミット。
+- スキーマの正本はマイグレーションと `docs/db/db_design.md` を揃える。
+
+## ドキュメント同期
+
+次を変えたら必ず該当ドキュメントを更新する。
+
+| 変更内容 | 更新先 |
+|----------|--------|
+| パス・クエリ・ボディ・応答形式 | `docs/api/api_specification.md` |
+| テーブル・ビュー・制約 | `docs/db/db_design.md` |
+| 環境変数の追加 | `backend/.env.example` と必要ならリポジトリ直下 `.env.example` |
+
+## テスト
+
+- `backend/tests/` に `unittest` でテストを追加可能。変更したルートは可能ならテストを追加する。

@@ -1,0 +1,30 @@
+---
+description: Flutter フロントのディレクトリ規約と実装の合わせ方
+globs: frontend/**/*.dart
+alwaysApply: false
+---
+
+# Frontend（Flutter）
+
+## ディレクトリ
+
+- `lib/core/` … API クライアント、定数、共通ウィジェット・拡張など（機能横断のみ）。
+- `lib/features/<機能名>/` … 画面・状態・その機能専用の UI/ロジック。新機能はここにまとめる。
+- `lib/main.dart` … エントリと最小限の全体設定。
+
+共通処理が増えすぎたときだけ `core` に寄せる。機能固有のコードを `core` に置かない。
+
+## 状態管理・HTTP（導入後）
+
+Riverpod と Dio を採用する想定（要件・設計書）。パッケージ追加後は:
+
+- API 呼び出しは `core` に薄いクライアントをまとめ、`features` から利用する。
+- ベース URL は `--dart-define` または実行環境で切り替え可能にする。
+
+## ドキュメント同期
+
+画面やユーザーフローが変わったら `docs/screens/` の該当仕様を更新する。
+
+## 依存関係
+
+コード変更後は `frontend/` で `flutter pub get` が必要になることがある。解析エラーが続く場合は `dart analyze` で確認する。

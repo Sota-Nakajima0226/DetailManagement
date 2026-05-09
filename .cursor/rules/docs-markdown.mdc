@@ -1,0 +1,33 @@
+---
+description: docs 配下の Markdown を編集するときの整合ルール
+globs: docs/**/*.md
+alwaysApply: false
+---
+
+# ドキュメント（docs）
+
+## ファイルの役割
+
+| 領域 | 主なファイル |
+|------|----------------|
+| 要件定義 | `docs/requirements/requirements_definition.md` |
+| API仕様 | `docs/api/api_specification.md` |
+| 画面一覧 | `docs/screens/screen_list.md` |
+| 画面仕様 | `screen_specification.md` |
+| DB設計 | `docs/db/db_design.md` |
+| フォルダ構成 | `docs/architecture/` |
+
+## 編集時のルール
+
+- 仕様を変えたら、ユーザー向け説明と表・コードブロックの両方が矛盾しないようにする。
+- API のパスやクエリ名は `backend` の実装と一致させる。
+- DB のテーブル・カラム名は `app/models` と `docs/db/db_design.md` で一致させる。
+- 画面 ID（SCR-xxx）は `screen_list.md` と `screen_specification.md` で対応を崩さない。
+
+## 目次
+
+見出しを増減したら、各ドキュメント先頭の「目次」セクションのアンカーリンクを更新する。
+
+## 言語
+
+既存ドキュメントは日本語ベース。新規追記も既存ファイルのトーンに合わせる。

@@ -1,0 +1,32 @@
+[
+  {
+    "name": "東京ガス",
+    "amount": 20000,
+    "category_name": "光熱費",
+    "billing_day": 7,
+    "card_holder": "共通",
+    "is_active": true,
+    "valid_from": "2026-01-01",
+    "valid_until": null
+  },
+  {
+    "name": "Suicaチャージ（家族）",
+    "amount": 2000,
+    "category_name": "交通費",
+    "billing_day": 1,
+    "card_holder": "妻",
+    "is_active": true,
+    "valid_from": "2026-01-01",
+    "valid_until": null
+  },
+  {
+    "name": "Suicaチャージ（本人）",
+    "amount": 5000,
+    "category_name": "交通費",
+    "billing_day": 1,
+    "card_holder": "夫",
+    "is_active": true,
+    "valid_from": "2026-01-01",
+    "valid_until": null
+  }
+]

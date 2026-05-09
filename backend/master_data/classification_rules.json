@@ -1,0 +1,23 @@
+[
+  { "pattern": "ﾀｲﾖ-", "is_regex": false, "category_name": "食費", "priority": 220 },
+  { "pattern": "ファミリーマート", "is_regex": false, "category_name": "食費", "priority": 210 },
+  { "pattern": "セブン－イレブン", "is_regex": false, "category_name": "食費", "priority": 210 },
+  { "pattern": "ローソン", "is_regex": false, "category_name": "食費", "priority": 210 },
+  { "pattern": "ﾐﾆｽﾄﾂﾌﾟ", "is_regex": false, "category_name": "食費", "priority": 205 },
+  { "pattern": "ｷﾞﾖｳﾑｽ-ﾊﾟ-", "is_regex": false, "category_name": "食費", "priority": 200 },
+  { "pattern": "ｺｽﾄｺ ﾎ-ﾙｾ-ﾙ", "is_regex": false, "category_name": "食費", "priority": 200 },
+  { "pattern": "ｽｷﾔ", "is_regex": false, "category_name": "外食", "priority": 195 },
+  { "pattern": "ﾏｸﾄﾞﾅﾙﾄﾞ", "is_regex": false, "category_name": "外食", "priority": 195 },
+  { "pattern": "くら寿司", "is_regex": false, "category_name": "外食", "priority": 195 },
+  { "pattern": "ﾂﾙﾊﾄﾞﾗﾂｸﾞ", "is_regex": false, "category_name": "日用品", "priority": 190 },
+  { "pattern": "ｳｴﾙｼｱ", "is_regex": false, "category_name": "日用品", "priority": 190 },
+  { "pattern": "マツキヨ", "is_regex": false, "category_name": "日用品", "priority": 190 },
+  { "pattern": "Ｓｕｉｃａ（携帯決済）", "is_regex": false, "category_name": "交通費", "priority": 180 },
+  { "pattern": "ＥＴＣカード売上", "is_regex": false, "category_name": "車関連", "priority": 180 },
+  { "pattern": "ｺｽﾄｺｶﾞｽｽﾃ-ｼﾖﾝ", "is_regex": false, "category_name": "車関連", "priority": 175 },
+  { "pattern": "イデミツ（アポロステーション）", "is_regex": false, "category_name": "車関連", "priority": 175 },
+  { "pattern": "ＥＮＥＯＳ", "is_regex": false, "category_name": "車関連", "priority": 175 },
+  { "pattern": "ﾄｳｷｮｳ ｶﾞｽ", "is_regex": false, "category_name": "光熱費", "priority": 170 },
+  { "pattern": "楽天トラベル", "is_regex": false, "category_name": "娯楽", "priority": 160 },
+  { "pattern": "楽天ｔｏｔｏ", "is_regex": false, "category_name": "娯楽", "priority": 160 }
+]

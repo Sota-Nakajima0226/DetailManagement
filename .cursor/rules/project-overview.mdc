@@ -1,0 +1,26 @@
+---
+description: DetailManagement モノレポの前提とドキュメントの正本
+alwaysApply: true
+---
+
+# プロジェクト概要
+
+家族向け家計管理アプリ（Flutter Web / PWA + FastAPI + PostgreSQL / Supabase）。
+
+## レイヤとパス
+
+- フロント: `frontend/`（Flutter）
+- API: `backend/`（FastAPI、`backend/main.py` がエントリ、`uvicorn main:app`）
+- 設計ドキュメント: `docs/`（要件・API・画面・DB・アーキテクチャ）
+
+## 設計ドキュメントの正本
+
+- 詳細な一枚もの: リポジトリ直下の `requirements_and_design.md`
+- 運用・レビュー向けに分割された正本: `docs/` 配下
+
+実装や仕様変更時は、関係する `docs/` の該当ファイルを同じ変更で整合させる（API 変更なら `docs/api/api_specification.md`、スキーマ変更なら `docs/db/db_design.md` など）。
+
+## 変更の原則
+
+- タスクに不要なファイルは触らない（ドライブバイリファクタ禁止）。
+- 機密値はコードに書かず、環境変数（`.env`、`.env.example` のみコミット）で扱う。

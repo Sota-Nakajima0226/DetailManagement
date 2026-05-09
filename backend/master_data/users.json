@@ -1,0 +1,14 @@
+[
+  {
+    "id": "6c89f530-6450-4f9c-a460-ba1f00cb64ec",
+    "name": "sota",
+    "email": "sota@example.com",
+    "role": "owner"
+  },
+  {
+    "id": "45e61f02-569c-4dda-b4d5-f7f4d100f732",
+    "name": "seira",
+    "email": "seira@example.com",
+    "role": "member"
+  }
+]
