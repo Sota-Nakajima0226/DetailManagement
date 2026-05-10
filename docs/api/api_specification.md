@@ -259,7 +259,7 @@
 分類優先順位:
 1. `classification_rules` を `priority` 降順で評価。
 2. 未ヒット時はClaude APIでカテゴリ推定。
-3. AI確信度が閾値未満（仮: 0.7）の場合は `未分類`。
+3. AI確信度が閾値未満（仮: 0.7）の場合は `category_id = NULL` のまま保存し、UI 上は「未分類」として表示する（マスタの「その他」とは別物）。
 
 記録ルール:
 - ルール一致時: `classified_by = "rule"`

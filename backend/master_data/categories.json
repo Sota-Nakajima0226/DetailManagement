@@ -5,8 +5,8 @@
   { "name": "交通費", "color": "#9C27B0", "sort_order": 4 },
   { "name": "外食", "color": "#F44336", "sort_order": 5 },
   { "name": "医療費", "color": "#00BCD4", "sort_order": 6 },
-  { "name": "娯楽", "color": "#FF5722", "sort_order": 7 },
+  { "name": "娯楽", "color": "#E91E63", "sort_order": 7 },
   { "name": "住居費", "color": "#3F51B5", "sort_order": 8 },
   { "name": "車関連", "color": "#795548", "sort_order": 9 },
-  { "name": "未分類", "color": "#9E9E9E", "sort_order": 99 }
+  { "name": "その他", "color": "#607D8B", "sort_order": 99 }
 ]

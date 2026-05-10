@@ -199,7 +199,7 @@
 4. 分類ロジックを実行
    a. ルールテーブルと照合 → マッチしたらカテゴリ確定
    b. マッチしなければ Claude API に店名を渡してカテゴリ推定
-   c. AI確信度が低い場合は「未分類」として保存
+   c. AI確信度が低い場合は `category_id = NULL` のまま保存（UI上「未分類」として表示）
 5. statement_items テーブルに保存
 6. LINE Notify で妻に「明細がアップされました」と通知
 ```
@@ -404,8 +404,10 @@ INSERT INTO categories (name, color, sort_order) VALUES
   ('交通費', '#9C27B0', 4),
   ('外食',   '#F44336', 5),
   ('医療費', '#00BCD4', 6),
-  ('娯楽',   '#FF5722', 7),
-  ('未分類', '#9E9E9E', 99);
+  ('娯楽',   '#E91E63', 7),
+  ('住居費', '#3F51B5', 8),
+  ('車関連', '#795548', 9),
+  ('その他', '#607D8B', 99);
 ```
 
 ---
@@ -486,8 +488,8 @@ INSERT INTO categories (name, color, sort_order) VALUES
   │
   │ 確信度 < 0.7
   ▼
-③ 未分類として保存
-     category_id = 未分類ID、classified_by = NULL
+③ 未分類のまま保存
+     category_id = NULL、classified_by = NULL（UI上は「未分類」と表示）
 ```
 
 ### Claude API へのプロンプト例

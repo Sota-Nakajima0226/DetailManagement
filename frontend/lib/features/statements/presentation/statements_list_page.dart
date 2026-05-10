@@ -1,15 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../../analytics/presentation/analytics_page.dart';
-import '../../categories/presentation/categories_page.dart';
-import '../../fixed_expenses/presentation/fixed_expenses_page.dart';
-import '../../manual_expenses/presentation/manual_expenses_page.dart';
-import '../../rules/presentation/rules_page.dart';
+import '../../../core/presentation/main_app_bar_actions.dart';
 import '../data/statements_api.dart';
 import '../models/category_item.dart';
 import '../models/statement_item.dart';
 import 'statement_classification_page.dart';
-import '../../upload/presentation/upload_page.dart';
 
 class StatementsListPage extends StatefulWidget {
   const StatementsListPage({super.key});
@@ -253,40 +248,7 @@ class _StatementsListPageState extends State<StatementsListPage> {
       appBar: AppBar(
         title: const Text('明細一覧'),
         actions: [
-          IconButton(
-            tooltip: 'アップロード',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const UploadPage(),
-                ),
-              );
-            },
-            icon: const Icon(Icons.upload_file),
-          ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              final routes = <String, Widget>{
-                'analytics': const AnalyticsPage(),
-                'categories': const CategoriesPage(),
-                'rules': const RulesPage(),
-                'fixed': const FixedExpensesPage(),
-                'manual': const ManualExpensesPage(),
-              };
-              final page = routes[value];
-              if (page == null) return;
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => page),
-              );
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'analytics', child: Text('グラフ・集計')),
-              PopupMenuItem(value: 'categories', child: Text('カテゴリ管理')),
-              PopupMenuItem(value: 'rules', child: Text('分類ルール管理')),
-              PopupMenuItem(value: 'fixed', child: Text('固定費管理')),
-              PopupMenuItem(value: 'manual', child: Text('手動支払い登録')),
-            ],
-          ),
+          ...buildMainAppBarActions(context),
           IconButton(
             tooltip: '絞り込み',
             onPressed: _openFilterSheet,
@@ -324,17 +286,24 @@ class _StatementsListPageState extends State<StatementsListPage> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
             child: Row(
               children: [
                 IconButton(
+                  visualDensity: VisualDensity.compact,
                   onPressed: _isLoading ? null : () => _changeMonth(-1),
                   icon: const Icon(Icons.chevron_left),
                 ),
                 Expanded(
                   child: DropdownButtonFormField<int>(
                     value: _selectedYear,
-                    decoration: const InputDecoration(labelText: '年'),
+                    isDense: true,
+                    decoration: const InputDecoration(
+                      labelText: '年',
+                      isDense: true,
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
                     items: years
                         .map((year) =>
                             DropdownMenuItem(value: year, child: Text(year.toString())))
@@ -350,7 +319,13 @@ class _StatementsListPageState extends State<StatementsListPage> {
                 Expanded(
                   child: DropdownButtonFormField<int>(
                     value: _selectedMonth,
-                    decoration: const InputDecoration(labelText: '月'),
+                    isDense: true,
+                    decoration: const InputDecoration(
+                      labelText: '月',
+                      isDense: true,
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
                     items: months
                         .map((month) => DropdownMenuItem(
                               value: month,
@@ -365,6 +340,7 @@ class _StatementsListPageState extends State<StatementsListPage> {
                   ),
                 ),
                 IconButton(
+                  visualDensity: VisualDensity.compact,
                   onPressed: _isLoading ? null : () => _changeMonth(1),
                   icon: const Icon(Icons.chevron_right),
                 ),
@@ -383,7 +359,7 @@ class _StatementsListPageState extends State<StatementsListPage> {
               ),
             ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: Row(
               children: [
                 Text('件数: ${_statements.length}'),
@@ -397,24 +373,59 @@ class _StatementsListPageState extends State<StatementsListPage> {
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : RefreshIndicator(
-                    onRefresh: _search,
-                    child: ListView.separated(
-                      itemCount: _statements.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final item = _statements[index];
-                        return ListTile(
-                          onTap: () => _openClassification(item),
-                          title: Text(item.shopName),
-                          subtitle: Text(
-                            '${_formatYmd(item.usedAt)} / ${item.cardHolder ?? '-'} / ${_categoryNameFromId(item.categoryId)} / ${item.classifiedBy ?? '-'}',
-                          ),
-                          trailing: Text('${item.amount} 円'),
-                        );
-                      },
-                    ),
-                  ),
+                : _statements.isEmpty
+                    ? RefreshIndicator(
+                        onRefresh: _search,
+                        child: ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          children: [
+                            const SizedBox(height: 80),
+                            Center(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 24),
+                                child: Column(
+                                  children: [
+                                    Icon(
+                                      Icons.inbox_outlined,
+                                      size: 64,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .outline,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      _activeFilterCount() > 0
+                                          ? '条件に該当する明細はありません'
+                                          : '$_selectedYear年$_selectedMonth月の明細はまだアップロードされていません',
+                                      textAlign: TextAlign.center,
+                                      style:
+                                          Theme.of(context).textTheme.bodyLarge,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _search,
+                        child: ListView.separated(
+                          itemCount: _statements.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final item = _statements[index];
+                            return ListTile(
+                              onTap: () => _openClassification(item),
+                              title: Text(item.shopName),
+                              subtitle: Text(
+                                '${_formatYmd(item.usedAt)} / ${item.cardHolder ?? '-'} / ${_categoryNameFromId(item.categoryId)} / ${item.classifiedBy ?? '-'}',
+                              ),
+                              trailing: Text('${item.amount} 円'),
+                            );
+                          },
+                        ),
+                      ),
           ),
         ],
       ),
