@@ -1,12 +1,12 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-from app.core.config import DATABASE_URL
+from app.core.config import DATABASE_URL, normalize_database_url
 
 
 Base = declarative_base()
 
-engine = create_engine(DATABASE_URL) if DATABASE_URL else None
+engine = create_engine(normalize_database_url(DATABASE_URL)) if DATABASE_URL else None
 
 SessionLocal = (
     sessionmaker(autocommit=False, autoflush=False, bind=engine) if engine else None

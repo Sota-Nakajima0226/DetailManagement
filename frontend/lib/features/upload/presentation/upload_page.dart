@@ -7,7 +7,14 @@ import '../../statements/data/statements_api.dart';
 import '../models/upload_result.dart';
 
 class UploadPage extends StatefulWidget {
-  const UploadPage({super.key});
+  const UploadPage({
+    super.key,
+    this.initialYear,
+    this.initialMonth,
+  });
+
+  final int? initialYear;
+  final int? initialMonth;
 
   @override
   State<UploadPage> createState() => _UploadPageState();
@@ -28,8 +35,15 @@ class _UploadPageState extends State<UploadPage> {
   @override
   void initState() {
     super.initState();
-    _selectedYear = _now.year;
-    _selectedMonth = _now.month;
+    final iy = widget.initialYear;
+    final im = widget.initialMonth;
+    if (iy != null && im != null) {
+      _selectedYear = iy;
+      _selectedMonth = im;
+    } else {
+      _selectedYear = _now.year;
+      _selectedMonth = _now.month;
+    }
   }
 
   bool _isAllowedExtension(String fileName) {

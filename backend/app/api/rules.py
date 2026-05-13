@@ -1,6 +1,9 @@
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.models import ClassificationRule
 from app.schemas import (
@@ -10,10 +13,14 @@ from app.schemas import (
 )
 
 
-router = APIRouter(prefix="/rules", tags=["rules"])
+router = APIRouter(
+    prefix="/rules",
+    tags=["rules"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
-@router.get("", response_model=list[ClassificationRuleResponse])
+@router.get("", response_model=List[ClassificationRuleResponse])
 def list_rules(db: Session = Depends(get_db)):
     return (
         db.query(ClassificationRule)

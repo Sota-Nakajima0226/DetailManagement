@@ -66,7 +66,7 @@ Supabase Auth が主に管理し、アプリではロール参照を行う。
 | pattern | TEXT | マッチパターン（文字列/正規表現） |
 | is_regex | BOOLEAN | 正規表現フラグ |
 | category_id | INT FK | `categories.id` |
-| priority | INT | 優先度（0〜100。大きいほど先評価） |
+| priority | INT | 優先度（0以上。大きいほど先評価） |
 | created_at | TIMESTAMPTZ | 作成日時 |
 
 ### statements（明細ファイル）

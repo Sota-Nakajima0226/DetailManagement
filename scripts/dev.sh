@@ -6,6 +6,8 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="$REPO_ROOT/backend"
 FRONTEND_DIR="$REPO_ROOT/frontend"
+REQUIRED_PYTHON_MAJOR=3
+REQUIRED_PYTHON_MINOR=11
 
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 # 同一 LAN からアクセスするには 0.0.0.0。ローカルのみにしたいときは 127.0.0.1
@@ -47,6 +49,21 @@ activate_venv() {
   return 1
 }
 
+ensure_python_version() {
+  python - <<PY
+import sys
+
+required = ($REQUIRED_PYTHON_MAJOR, $REQUIRED_PYTHON_MINOR)
+actual = sys.version_info[:2]
+if actual != required:
+    raise SystemExit(
+        f"Python {required[0]}.{required[1]} is required, "
+        f"but current interpreter is {sys.version.split()[0]} ({sys.executable}). "
+        "Recreate backend/.venv with: cd backend && python3.11 -m venv .venv"
+    )
+PY
+}
+
 # $1 = yes のときだけフロントの URL を表示（backend 単体起動では誤解を避ける）
 print_dev_urls() {
   local with_flutter="${1:-no}"
@@ -84,8 +101,9 @@ wait_for_backend() {
 run_backend() {
   cd "$BACKEND_DIR"
   activate_venv || true
+  ensure_python_version
   print_dev_urls no
-  exec python3 -m uvicorn main:app --reload --host "$BACKEND_BIND_HOST" --port "$BACKEND_PORT"
+  exec python -m uvicorn main:app --reload --host "$BACKEND_BIND_HOST" --port "$BACKEND_PORT"
 }
 
 run_frontend() {
@@ -106,7 +124,8 @@ run_all() {
 
   cd "$BACKEND_DIR"
   activate_venv || true
-  python3 -m uvicorn main:app --reload --host "$BACKEND_BIND_HOST" --port "$BACKEND_PORT" &
+  ensure_python_version
+  python -m uvicorn main:app --reload --host "$BACKEND_BIND_HOST" --port "$BACKEND_PORT" &
   backend_pid=$!
 
   cleanup() {
@@ -148,6 +167,7 @@ usage() {
 
 前提:
   - バックエンドは backend/.env に DATABASE_URL 等が必要な場合があります
+  - バックエンドの Python は 3.11 固定です（backend/.venv は python3.11 で作成してください）
   - Python 仮想環境は backend/.venv / backend/venv / リポジトリ直下 .venv を自動で有効化します
 
 Flutter（frontend / all）:

@@ -68,7 +68,7 @@
 
 | 機能 | 詳細 | 優先度 |
 |------|------|--------|
-| 明細一覧表示 | 日付・利用店名・金額・名義人（夫/妻）を一覧表示 | 高 |
+| 明細一覧表示 | 日付・利用店名・金額・名義人（夫/妻）・分類元・AI信頼度を一覧表示 | 高 |
 | 月次切り替え | 月を選択して過去の明細を参照 | 高 |
 | フィルター | カテゴリ・名義人・未分類でフィルタリング | 中 |
 | 月次集計サマリー | カテゴリ別・名義人別の合計金額をグラフで可視化 | 中 |
@@ -81,7 +81,7 @@
 | カテゴリマスター管理 | 食費・光熱費・交通費・日用品等のCRUD操作 | 高 |
 | ルールベース自動分類 | 利用店名の文字列パターンでカテゴリを自動判定 | 高 |
 | AI自動分類 | ルール未適用の支払いをClaude APIで分類 | 高 |
-| 手動上書き | AI・ルール分類の結果を手動修正 | 高 |
+| 手動上書き | AI・ルール分類の結果を手動修正。未分類行と低信頼度AI分類行を色分けし、編集が必要な明細を見つけやすくする | 高 |
 | 分類ルール管理 | ルール（店名パターン→カテゴリ）のCRUD操作 | 高 |
 | ルール自動追加提案 | 手動修正時に「このルールを追加しますか？」を提案 | 中 |
 
@@ -138,7 +138,7 @@
 | フロントエンド | Flutter（Dart）— Web ビルド | iOS/Android/Web を1コードでカバー。将来のネイティブ化も容易 |
 | 状態管理 | Riverpod | Flutter推奨・テストしやすい |
 | HTTPクライアント | Dio | インターセプター・エラーハンドリングが充実 |
-| バックエンド | Python + FastAPI | CSV/PDFパース・AI連携が得意。チュートリアルから入りやすい |
+| バックエンド | Python 3.11 + FastAPI | CSV/PDFパース・AI連携が得意。チュートリアルから入りやすい |
 | ORM | SQLAlchemy | FastAPIとの相性が良い |
 | データベース | PostgreSQL（Supabase） | 無料枠・GUIで管理しやすい |
 | ファイルストレージ | Supabase Storage | DBと同サービスで管理が簡単 |
@@ -426,7 +426,7 @@ INSERT INTO categories (name, color, sort_order) VALUES
 | メソッド | パス | 説明 |
 |----------|------|------|
 | POST | `/statements/upload` | CSVまたはPDFをアップロード・パース・分類 |
-| GET | `/statements` | 明細一覧取得（year・month・category・card_holderでフィルタ） |
+| GET | `/statements` | 明細一覧取得（year・month・category・card_holderでフィルタ、AI信頼度と要確認フラグを含む） |
 | PATCH | `/statements/items/{id}` | カテゴリ手動変更 |
 | GET | `/statements/summary` | 月次集計・カテゴリ別合計 |
 
@@ -691,6 +691,8 @@ GitHub がRenderに通知
 Build Command: pip install -r requirements.txt
 Start Command: uvicorn main:app --host 0.0.0.0 --port $PORT
 ```
+
+Python ランタイムは `runtime.txt` で 3.11 系に固定する。
 
 **フロントエンド（Static Site）**
 

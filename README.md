@@ -6,7 +6,7 @@
 
 ## 前提環境
 
-- **Python** 3 系（バックエンド）
+- **Python** 3.11（バックエンド。`.python-version` / `runtime.txt` で固定）
 - **Flutter** SDK（フロント; Web ビルド用）
 - **PostgreSQL**（API が DB に接続する機能を使う場合）
 - **bash**（起動スクリプト用）
@@ -17,8 +17,9 @@
 
 ```bash
 cd backend
-python3 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate   # Windows は .venv\Scripts\activate
+python --version             # Python 3.11.x であることを確認
 pip install -r requirements.txt
 cp .env.example .env
 # .env の DATABASE_URL などを環境に合わせて編集
@@ -97,6 +98,57 @@ FLUTTER_DEVICE=chrome ./scripts/dev.sh all
 | `FLUTTER_DEVICE` | `flutter run -d` のデバイス | `web-server` |
 
 ローカルだけに閉じたい場合は `BACKEND_BIND_HOST=127.0.0.1` などにしてください。
+
+### AI分類設定
+
+| 変数 | 説明 | 既定値 |
+|------|------|--------|
+| `AI_CONFIDENCE_REVIEW_THRESHOLD` | AI分類済み明細を「要確認」として表示する信頼度しきい値 | `0.8` |
+
+### 認証設定（Supabase Auth）
+
+`/health` を除く全エンドポイントは `Authorization: Bearer <JWT>` を必須にしています。
+dev / prod ともに Supabase Auth を使い、認証コードパスを完全に1本化しています（dev 専用バイパスは設けない方針）。
+
+| 変数 | 説明 | 既定値 |
+|------|------|--------|
+| `SUPABASE_JWT_SECRET` | Supabase の JWT 秘密鍵（HS256 検証用、必須） | なし |
+| `SUPABASE_JWT_AUDIENCE` | JWT の audience クレーム | `authenticated` |
+| `SUPABASE_JWT_ALGORITHM` | 署名アルゴリズム | `HS256` |
+
+#### 環境構築の流れ
+
+1. Supabase で **dev 用プロジェクト**と**本番用プロジェクト**を別々に作成する。
+2. 各プロジェクトの管理画面 *Project Settings → API → JWT Settings → JWT Secret* を `SUPABASE_JWT_SECRET` に設定する（`backend/.env` の値は dev 用、Render の環境変数に本番用）。
+3. 夫・妻の 2 アカウントを各 Supabase プロジェクトで作成し、UUID を控える。
+4. `users` テーブルに以下のような SQL でレコードを投入する（`role` は `owner` か `member`）。
+
+   ```sql
+   INSERT INTO users (id, email, role) VALUES
+     ('<夫のUUID>', 'husband@example.com', 'owner'),
+     ('<妻のUUID>', 'wife@example.com',    'member');
+   ```
+
+5. フロントは Supabase SDK でログインし、取得した JWT を `Authorization` ヘッダに載せて API を叩く。
+
+`users` に未登録の UUID で来たリクエストは 403 になります。ユニットテストでは `app.dependency_overrides[get_current_user]` で固定ユーザーを注入してください（例: `backend/tests/test_auth.py`）。
+
+### バックエンドログ
+
+バックエンドは stdout と `backend/logs/app.log` に JSON 形式でログを出力します。ログファイルは既定で 10MB x 5世代でローテーションします。API アクセスログは既定で有効で、リクエスト・レスポンス body は出力しません。
+
+| 変数 | 説明 | 既定値 |
+|------|------|--------|
+| `LOG_LEVEL` | Python ログレベル | `INFO` |
+| `LOG_API_ACCESS` | API アクセスログの出力 | `true` |
+| `LOG_FILE_ENABLED` | ログファイル出力 | `true` |
+| `LOG_FILE_PATH` | ログファイルパス（backend からの相対パス） | `logs/app.log` |
+| `LOG_FILE_MAX_BYTES` | ローテーションするファイルサイズ | `10485760` |
+| `LOG_FILE_BACKUP_COUNT` | 保持するローテーション世代数 | `5` |
+| `LOG_AI_CLASSIFICATION_DETAIL` | AI に渡した店名と分類結果の詳細ログを出力 | `false` |
+
+`LOG_AI_CLASSIFICATION_DETAIL=true` は家計情報を含むログになるため、開発・調査時のみ有効にしてください。
+`backend/logs/` 配下のログファイルは Git 管理対象外です。
 
 ## 開発時のメモ
 

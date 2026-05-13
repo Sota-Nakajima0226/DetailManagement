@@ -1,15 +1,22 @@
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.models import Category
 from app.schemas import CategoryCreate, CategoryResponse, CategoryUpdate
 
 
-router = APIRouter(prefix="/categories", tags=["categories"])
+router = APIRouter(
+    prefix="/categories",
+    tags=["categories"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
-@router.get("", response_model=list[CategoryResponse])
+@router.get("", response_model=List[CategoryResponse])
 def list_categories(db: Session = Depends(get_db)):
     return db.query(Category).order_by(Category.sort_order.asc(), Category.id.asc()).all()
 

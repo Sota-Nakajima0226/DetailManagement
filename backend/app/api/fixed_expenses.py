@@ -1,17 +1,22 @@
-from typing import Any, cast
+from typing import Any, List, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.models import FixedExpense
 from app.schemas import FixedExpenseCreate, FixedExpenseResponse, FixedExpenseUpdate
 
 
-router = APIRouter(prefix="/fixed-expenses", tags=["fixed-expenses"])
+router = APIRouter(
+    prefix="/fixed-expenses",
+    tags=["fixed-expenses"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
-@router.get("", response_model=list[FixedExpenseResponse])
+@router.get("", response_model=List[FixedExpenseResponse])
 def list_fixed_expenses(db: Session = Depends(get_db)):
     return db.query(FixedExpense).order_by(FixedExpense.id.asc()).all()
 

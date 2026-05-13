@@ -7,6 +7,8 @@ class StatementItem {
     this.cardHolder,
     this.categoryId,
     this.classifiedBy,
+    this.aiConfidence,
+    this.needsAiReview = false,
     required this.source,
   });
 
@@ -17,6 +19,8 @@ class StatementItem {
   final String? cardHolder;
   final int? categoryId;
   final String? classifiedBy;
+  final double? aiConfidence;
+  final bool needsAiReview;
   final String source;
 
   factory StatementItem.fromJson(Map<String, dynamic> json) {
@@ -28,6 +32,8 @@ class StatementItem {
       cardHolder: json['card_holder'] as String?,
       categoryId: json['category_id'] as int?,
       classifiedBy: json['classified_by'] as String?,
+      aiConfidence: (json['ai_confidence'] as num?)?.toDouble(),
+      needsAiReview: json['needs_ai_review'] as bool? ?? false,
       source: json['source'] as String? ?? 'csv',
     );
   }

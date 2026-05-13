@@ -1,6 +1,7 @@
 from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, Text, UniqueConstraint
 from sqlalchemy.sql import func
 
+from app.core.config import AI_CONFIDENCE_REVIEW_THRESHOLD
 from app.core.database import Base
 
 
@@ -54,6 +55,14 @@ class StatementItem(Base):
     ai_raw_response = Column(Text)
     source = Column(Text, default="csv")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    @property
+    def needs_ai_review(self) -> bool:
+        return (
+            self.classified_by == "ai"
+            and self.ai_confidence is not None
+            and self.ai_confidence <= AI_CONFIDENCE_REVIEW_THRESHOLD
+        )
 
 
 class FixedExpense(Base):

@@ -67,7 +67,7 @@ class _RulesPageState extends State<RulesPage> {
               TextField(
                 controller: priority,
                 decoration: const InputDecoration(
-                  labelText: '優先度 (0〜100)',
+                  labelText: '優先度 (0以上)',
                 ),
                 keyboardType: TextInputType.number,
               ),
@@ -103,11 +103,10 @@ class _RulesPageState extends State<RulesPage> {
     if (pattern.text.trim().isEmpty ||
         parsedPriority == null ||
         parsedPriority < 0 ||
-        parsedPriority > 100 ||
         categoryId == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('入力内容を確認してください（優先度は0〜100）')),
+        const SnackBar(content: Text('入力内容を確認してください（優先度は0以上）')),
       );
       return;
     }

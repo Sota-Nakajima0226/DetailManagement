@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from datetime import date, datetime
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -17,6 +19,8 @@ class StatementItemResponse(BaseModel):
     card_holder: Optional[str] = None
     category_id: Optional[int] = None
     classified_by: Optional[str] = None
+    ai_confidence: Optional[float] = None
+    needs_ai_review: bool = False
     source: str
     created_at: datetime
 
@@ -44,7 +48,7 @@ class StatementSummaryItem(BaseModel):
 class StatementSummaryResponse(BaseModel):
     year: int
     month: int
-    totals: list[StatementSummaryItem]
+    totals: List[StatementSummaryItem]
 
 
 class StatementByHolderItem(BaseModel):
@@ -55,7 +59,7 @@ class StatementByHolderItem(BaseModel):
 class StatementByHolderSummaryResponse(BaseModel):
     year: int
     month: int
-    totals: list[StatementByHolderItem]
+    totals: List[StatementByHolderItem]
 
 
 class YearMonthValue(BaseModel):
@@ -72,13 +76,13 @@ class MonthlyTrendPoint(BaseModel):
 class MonthlyTrendSeries(BaseModel):
     category_id: Optional[int] = None
     category_name: str
-    points: list[MonthlyTrendPoint]
+    points: List[MonthlyTrendPoint]
 
 
 class StatementMonthlyTrendResponse(BaseModel):
     from_: YearMonthValue = Field(serialization_alias="from")
     to: YearMonthValue
-    series: list[MonthlyTrendSeries]
+    series: List[MonthlyTrendSeries]
 
 
 class CategoryBase(BaseModel):
@@ -107,7 +111,7 @@ class ClassificationRuleBase(BaseModel):
     pattern: str
     is_regex: bool = False
     category_id: int
-    priority: int = Field(default=0, ge=0, le=100)
+    priority: int = Field(default=0, ge=0)
 
 
 class ClassificationRuleCreate(ClassificationRuleBase):

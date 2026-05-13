@@ -5,6 +5,7 @@ from alembic import context
 from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 
+from app.core.config import normalize_database_url
 from app.core.database import Base
 
 load_dotenv()
@@ -26,7 +27,7 @@ def get_url() -> str:
         raise RuntimeError(
             "DATABASE_URL が未設定です。backend/.env に設定するか、環境変数で指定してください。"
         )
-    return url
+    return normalize_database_url(url)
 
 
 def run_migrations_offline() -> None:

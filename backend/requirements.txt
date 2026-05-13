@@ -1,9 +1,9 @@
 fastapi
 uvicorn
 python-multipart
-pandas
 openai
 python-dotenv
 sqlalchemy
-psycopg2-binary
+psycopg[binary]
 alembic
+python-jose[cryptography]

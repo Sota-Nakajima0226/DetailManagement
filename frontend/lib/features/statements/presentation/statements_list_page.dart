@@ -129,7 +129,8 @@ class _StatementsListPageState extends State<StatementsListPage> {
                     value: categoryId,
                     decoration: const InputDecoration(labelText: 'カテゴリ'),
                     items: [
-                      const DropdownMenuItem<int?>(value: null, child: Text('すべて')),
+                      const DropdownMenuItem<int?>(
+                          value: null, child: Text('すべて')),
                       ..._categories.map(
                         (c) => DropdownMenuItem<int?>(
                           value: c.id,
@@ -137,19 +138,22 @@ class _StatementsListPageState extends State<StatementsListPage> {
                         ),
                       ),
                     ],
-                    onChanged: (value) => setSheetState(() => categoryId = value),
+                    onChanged: (value) =>
+                        setSheetState(() => categoryId = value),
                   ),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String?>(
                     value: cardHolder,
                     decoration: const InputDecoration(labelText: '名義人'),
                     items: const [
-                      DropdownMenuItem<String?>(value: null, child: Text('すべて')),
+                      DropdownMenuItem<String?>(
+                          value: null, child: Text('すべて')),
                       DropdownMenuItem<String?>(value: '夫', child: Text('夫')),
                       DropdownMenuItem<String?>(value: '妻', child: Text('妻')),
                       DropdownMenuItem<String?>(value: '共通', child: Text('共通')),
                     ],
-                    onChanged: (value) => setSheetState(() => cardHolder = value),
+                    onChanged: (value) =>
+                        setSheetState(() => cardHolder = value),
                   ),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<bool?>(
@@ -157,10 +161,13 @@ class _StatementsListPageState extends State<StatementsListPage> {
                     decoration: const InputDecoration(labelText: '未分類'),
                     items: const [
                       DropdownMenuItem<bool?>(value: null, child: Text('すべて')),
-                      DropdownMenuItem<bool?>(value: true, child: Text('未分類のみ')),
-                      DropdownMenuItem<bool?>(value: false, child: Text('分類済みのみ')),
+                      DropdownMenuItem<bool?>(
+                          value: true, child: Text('未分類のみ')),
+                      DropdownMenuItem<bool?>(
+                          value: false, child: Text('分類済みのみ')),
                     ],
-                    onChanged: (value) => setSheetState(() => isUnclassified = value),
+                    onChanged: (value) =>
+                        setSheetState(() => isUnclassified = value),
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -225,6 +232,60 @@ class _StatementsListPageState extends State<StatementsListPage> {
     return found.first.name;
   }
 
+  String _classifiedByLabel(String? classifiedBy) {
+    switch (classifiedBy) {
+      case 'rule':
+        return 'ルール';
+      case 'ai':
+        return 'AI';
+      case 'manual':
+        return '手動';
+      default:
+        return '-';
+    }
+  }
+
+  String? _aiConfidenceLabel(StatementItem item) {
+    if (item.classifiedBy != 'ai' || item.aiConfidence == null) {
+      return null;
+    }
+    return 'AI信頼度: ${(item.aiConfidence! * 100).toStringAsFixed(0)}%';
+  }
+
+  Color? _statementTileColor(StatementItem item) {
+    if (item.categoryId == null) {
+      return Colors.amber.withValues(alpha: 0.18);
+    }
+    if (item.needsAiReview) {
+      return Colors.red.withValues(alpha: 0.10);
+    }
+    return null;
+  }
+
+  Widget? _statementReviewHint(StatementItem item) {
+    if (item.categoryId == null) {
+      return const Text(
+        '未分類のため確認が必要です',
+        style: TextStyle(
+          color: Colors.orange,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      );
+    }
+    if (item.needsAiReview) {
+      return const Text(
+        'AI信頼度が基準以下のため確認が必要です',
+        style: TextStyle(
+          color: Colors.red,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      );
+    }
+    return null;
+  }
+
   Future<void> _openClassification(StatementItem item) async {
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
@@ -248,7 +309,11 @@ class _StatementsListPageState extends State<StatementsListPage> {
       appBar: AppBar(
         title: const Text('明細一覧'),
         actions: [
-          ...buildMainAppBarActions(context),
+          ...buildMainAppBarActions(
+            context,
+            uploadTargetYear: _selectedYear,
+            uploadTargetMonth: _selectedMonth,
+          ),
           IconButton(
             tooltip: '絞り込み',
             onPressed: _openFilterSheet,
@@ -261,7 +326,8 @@ class _StatementsListPageState extends State<StatementsListPage> {
                     right: -6,
                     top: -6,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 1),
                       decoration: BoxDecoration(
                         color: Theme.of(context).colorScheme.error,
                         borderRadius: BorderRadius.circular(10),
@@ -305,8 +371,8 @@ class _StatementsListPageState extends State<StatementsListPage> {
                           EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
                     items: years
-                        .map((year) =>
-                            DropdownMenuItem(value: year, child: Text(year.toString())))
+                        .map((year) => DropdownMenuItem(
+                            value: year, child: Text(year.toString())))
                         .toList(),
                     onChanged: (value) async {
                       if (value == null) return;
@@ -382,15 +448,15 @@ class _StatementsListPageState extends State<StatementsListPage> {
                             const SizedBox(height: 80),
                             Center(
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 24),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 24),
                                 child: Column(
                                   children: [
                                     Icon(
                                       Icons.inbox_outlined,
                                       size: 64,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .outline,
+                                      color:
+                                          Theme.of(context).colorScheme.outline,
                                     ),
                                     const SizedBox(height: 12),
                                     Text(
@@ -415,11 +481,27 @@ class _StatementsListPageState extends State<StatementsListPage> {
                           separatorBuilder: (_, __) => const Divider(height: 1),
                           itemBuilder: (context, index) {
                             final item = _statements[index];
+                            final aiConfidenceLabel = _aiConfidenceLabel(item);
+                            final reviewHint = _statementReviewHint(item);
                             return ListTile(
+                              tileColor: _statementTileColor(item),
                               onTap: () => _openClassification(item),
                               title: Text(item.shopName),
-                              subtitle: Text(
-                                '${_formatYmd(item.usedAt)} / ${item.cardHolder ?? '-'} / ${_categoryNameFromId(item.categoryId)} / ${item.classifiedBy ?? '-'}',
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    [
+                                      _formatYmd(item.usedAt),
+                                      item.cardHolder ?? '-',
+                                      _categoryNameFromId(item.categoryId),
+                                      _classifiedByLabel(item.classifiedBy),
+                                      if (aiConfidenceLabel != null)
+                                        aiConfidenceLabel,
+                                    ].join(' / '),
+                                  ),
+                                  if (reviewHint != null) reviewHint,
+                                ],
                               ),
                               trailing: Text('${item.amount} 円'),
                             );

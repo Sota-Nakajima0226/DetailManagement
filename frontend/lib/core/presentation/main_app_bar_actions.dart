@@ -6,15 +6,24 @@ import '../../features/manual_expenses/presentation/manual_expenses_page.dart';
 import '../../features/rules/presentation/rules_page.dart';
 import '../../features/upload/presentation/upload_page.dart';
 
-/// 主要画面（明細一覧・グラフ集計など）の AppBar に共通で表示するアクション群。
-/// 「アップロード」ボタンと「設定系メニュー」の3点リーダーを返す。
-List<Widget> buildMainAppBarActions(BuildContext context) {
+/// 主要画面の AppBar 用。「アップロード」と設定メニュー。
+/// 明細一覧から開くときは [uploadTargetYear] / [uploadTargetMonth] で初期年月を渡す。
+List<Widget> buildMainAppBarActions(
+  BuildContext context, {
+  int? uploadTargetYear,
+  int? uploadTargetMonth,
+}) {
   return [
     IconButton(
       tooltip: 'アップロード',
       onPressed: () {
         Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const UploadPage()),
+          MaterialPageRoute<void>(
+            builder: (_) => UploadPage(
+              initialYear: uploadTargetYear,
+              initialMonth: uploadTargetMonth,
+            ),
+          ),
         );
       },
       icon: const Icon(Icons.upload_file),

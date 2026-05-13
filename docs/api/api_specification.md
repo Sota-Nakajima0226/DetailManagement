@@ -22,7 +22,23 @@
 
 ## 2. 共通仕様
 
-### 2.1 ステータスコード方針
+### 2.1 認証
+
+- `/health` を除く全エンドポイントは `Authorization: Bearer <JWT>` を必須とする。
+- JWT は Supabase Auth の access token（HS256 署名）を想定する。
+- サーバーは Supabase API を呼ばずに `SUPABASE_JWT_SECRET` でローカル署名検証する。
+- 検証後、JWT の `sub`（Supabase Auth の UUID）で `users` テーブルを引き、
+  未登録ユーザーは 403 を返す（事前に夫・妻の 2 アカウントを `users` に登録しておく）。
+- 開発環境は本番とは別の Supabase プロジェクトを用意し、`SUPABASE_JWT_SECRET` を切り替えるだけで本番と同じ認証コードパスを通す。
+
+| 状態 | 応答 |
+|------|------|
+| Authorization ヘッダなし | 401 + `WWW-Authenticate: Bearer` |
+| JWT 不正・期限切れ | 401 |
+| JWT は有効だが `users` に未登録 | 403 |
+| サーバーに `SUPABASE_JWT_SECRET` 未設定 | 500（設定エラー） |
+
+### 2.2 ステータスコード方針
 
 | コード | 用途 |
 |--------|------|
@@ -30,17 +46,27 @@
 | 201 | 作成成功 |
 | 400 | リクエスト不正 |
 | 401 | 認証エラー |
+| 403 | 認可エラー（`users` 未登録など） |
 | 404 | 対象データなし |
 | 422 | バリデーションエラー |
 | 500 | サーバー内部エラー |
 
-### 2.2 エラー応答例
+### 2.3 エラー応答例
 
 ```json
 {
   "detail": "Invalid request"
 }
 ```
+
+### 2.4 ログ
+
+- アプリケーションログは stdout とログファイルに JSON 形式で出力する（Render / ローカルターミナル / `backend/logs/app.log` で確認）。
+- ログファイルは既定で `logs/app.log`、10MB x 5世代でローテーションする（`LOG_FILE_*` 環境変数で変更可能）。
+- API アクセスログは `LOG_API_ACCESS=true`（既定）で出力し、`method` / `path` / `query` / `status_code` / `duration_ms` / `request_id` などのメタ情報を記録する。
+- リクエスト・レスポンス body は、明細や API キーなどの機密情報混入を避けるため出力しない。
+- AI 分類ログは通常、バッチ件数・採用件数・低確信度件数などのサマリのみ出力する。
+- `LOG_AI_CLASSIFICATION_DETAIL=true` のときだけ、AI に渡した店名と分類結果を詳細ログとして出力する（家計情報を含むため開発・調査時のみ推奨）。
 
 ## 3. エンドポイント一覧
 
@@ -63,11 +89,11 @@
   - `year`: 対象年
   - `month`: 対象月
 - 主な処理:
-  1. Supabase Storageへ原本保存
-  2. CSV/PDFパース
-  3. ルール分類 → AI分類（必要時）
+  1. Supabase Storageへ原本保存（未実装の場合あり）
+  2. CSV パース（PDF は別途）
+  3. ルール分類 → ルール未ヒット分を OpenAI で分類（`OPENAI_API_KEY` 設定時のみ）
   4. `statement_items` に保存
-  5. 妻へ通知送信
+  5. 妻へ通知送信（未実装の場合あり）
 - レスポンス例:
 
 ```json
@@ -88,6 +114,8 @@
   - `card_holder`
   - `is_unclassified`（`true` のとき `category_id IS NULL`）
 - レスポンス: 明細行リスト
+  - `ai_confidence`: AI 採用時の信頼度（0.0〜1.0、AI分類でない場合は `null`）
+  - `needs_ai_review`: `classified_by = "ai"` かつ `ai_confidence <= AI_CONFIDENCE_REVIEW_THRESHOLD` の場合 `true`
 
 ### PATCH `/statements/items/{id}`
 
@@ -206,7 +234,7 @@
 ```
 
 - バリデーション:
-  - `priority` は `0〜100` の整数
+  - `priority` は `0` 以上の整数
 
 ## 3.4 固定費
 
@@ -258,13 +286,19 @@
 
 分類優先順位:
 1. `classification_rules` を `priority` 降順で評価。
-2. 未ヒット時はClaude APIでカテゴリ推定。
-3. AI確信度が閾値未満（仮: 0.7）の場合は `category_id = NULL` のまま保存し、UI 上は「未分類」として表示する（マスタの「その他」とは別物）。
+2. 未ヒット時は、環境変数 `OPENAI_API_KEY` が設定されていれば OpenAI（Chat Completions）で店名からカテゴリを推定。未設定のときは AI を呼ばず未分類のまま取り込む。
+3. AI 確信度が閾値未満（既定 `AI_CLASSIFICATION_CONFIDENCE_THRESHOLD=0.7`）の場合は `category_id = NULL` のまま保存し、UI 上は「未分類」として表示する（マスタの「その他」とは別物）。閾値未満でも `ai_confidence` / `ai_raw_response` に推定結果を残す場合がある（デバッグ用）。
+
+ルール外の店名は取り込みバッチ内で重複排除し、OpenAI へは最大数十件ずつまとめて送る。
 
 記録ルール:
 - ルール一致時: `classified_by = "rule"`
-- AI判定時: `classified_by = "ai"`, `ai_confidence` を保存
+- AI 採用時（確信度 >= 閾値）: `classified_by = "ai"`, `ai_confidence` を保存
 - 手動修正時: `classified_by = "manual"`
+
+一覧画面の要確認表示:
+- AI 分類採用後も `AI_CONFIDENCE_REVIEW_THRESHOLD`（既定 `0.8`）以下の明細は `needs_ai_review = true` として返し、UI で低信頼度行として強調表示する。
+- `category_id = NULL` の明細は UI 上「未分類」として表示し、低信頼度行とは別色で強調表示する。
 
 ## 5. 通知系API（予定）
 

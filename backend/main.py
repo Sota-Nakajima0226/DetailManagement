@@ -2,10 +2,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import categories, fixed_expenses, health, manual_expenses, rules, statements_v2
+from app.core.logging import configure_logging
+from app.core.request_logging import RequestLoggingMiddleware
 
+
+configure_logging()
 
 app = FastAPI(title="Family Budget API", version="0.1.0")
 
+app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

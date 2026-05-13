@@ -1,17 +1,22 @@
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.models import ManualExpense
 from app.schemas import ManualExpenseCreate, ManualExpenseResponse, ManualExpenseUpdate
 
 
-router = APIRouter(prefix="/manual-expenses", tags=["manual-expenses"])
+router = APIRouter(
+    prefix="/manual-expenses",
+    tags=["manual-expenses"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
-@router.get("", response_model=list[ManualExpenseResponse])
+@router.get("", response_model=List[ManualExpenseResponse])
 def list_manual_expenses(
     year: Optional[int] = None, month: Optional[int] = None, db: Session = Depends(get_db)
 ):

@@ -1,15 +1,28 @@
+from __future__ import annotations
+
+import csv
 import io
+import logging
 import re
 from datetime import datetime
-from typing import Any, Optional, cast
+from typing import Any, List, Optional, cast
 
-import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, literal_column
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user
+from app.core.config import (
+    AI_CLASSIFICATION_CONFIDENCE_THRESHOLD,
+    OPENAI_API_KEY,
+    OPENAI_MODEL,
+)
 from app.core.database import get_db
 from app.models import Category, ClassificationRule, Statement, StatementItem
+from app.services.ai_category_classifier import (
+    ShopAiClassification,
+    classify_shop_names_openai,
+)
 from app.schemas import (
     MonthlyTrendPoint,
     MonthlyTrendSeries,
@@ -25,7 +38,8 @@ from app.schemas import (
 )
 
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
+logger = logging.getLogger(__name__)
 
 
 def _yyyymm(year: int, month: int) -> int:
@@ -44,7 +58,8 @@ def _parse_used_at(raw: str):
     return datetime.strptime(raw, "%Y/%m/%d").date()
 
 
-def _classify_shop_name(shop_name: str, rules: list[ClassificationRule]) -> tuple[Optional[int], str]:
+def _classify_by_rules(shop_name: str, rules: list[ClassificationRule]) -> Optional[int]:
+    """ルールに最初にマッチしたカテゴリ ID。マッチなしは None。"""
     for rule in rules:
         rule_obj = cast(Any, rule)
         pattern = str(rule_obj.pattern)
@@ -52,8 +67,8 @@ def _classify_shop_name(shop_name: str, rules: list[ClassificationRule]) -> tupl
         category_id = cast(Optional[int], rule_obj.category_id)
         matched = re.search(pattern, shop_name) if is_regex else pattern in shop_name
         if matched:
-            return category_id, "rule"
-    return None, "ai"
+            return category_id
+    return None
 
 
 @router.post("/upload", response_model=StatementUploadResponse, status_code=201)
@@ -70,12 +85,16 @@ async def upload_statement(
 
     content = await file.read()
     try:
-        df = pd.read_csv(io.StringIO(content.decode("utf-8-sig")))
+        reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
+        rows = list(reader)
+        columns = set(reader.fieldnames or [])
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to decode CSV: {exc}") from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Failed to parse CSV: {exc}") from exc
 
     required_columns = {"利用日", "利用店名・商品名", "利用者", "利用金額"}
-    if not required_columns.issubset(df.columns):
+    if not required_columns.issubset(columns):
         raise HTTPException(status_code=400, detail="CSV columns are invalid")
 
     statement = db.query(Statement).filter(Statement.year == year, Statement.month == month).first()
@@ -93,10 +112,11 @@ async def upload_statement(
     unclassified_count = 0
     error_count = 0
 
-    for _, row in df.iterrows():
-        used_at_raw = str(row.get("利用日", "")).strip()
-        shop_name = str(row.get("利用店名・商品名", "")).strip()
-        amount_raw = str(row.get("利用金額", "")).strip()
+    parsed_rows: list[dict[str, Any]] = []
+    for row in rows:
+        used_at_raw = str(row.get("利用日") or "").strip()
+        shop_name = str(row.get("利用店名・商品名") or "").strip()
+        amount_raw = str(row.get("利用金額") or "").strip()
         if not used_at_raw or not shop_name or not amount_raw:
             continue
         if used_at_raw == "nan" or shop_name == "nan" or amount_raw == "nan":
@@ -109,18 +129,71 @@ async def upload_statement(
             error_count += 1
             continue
 
-        category_id, classified_by = _classify_shop_name(shop_name, rules)
+        parsed_rows.append(
+            {
+                "used_at": used_at,
+                "shop_name": shop_name,
+                "amount": amount,
+                "card_holder": _normalize_card_holder(str(row.get("利用者") or "").strip()),
+                "rule_category_id": _classify_by_rules(shop_name, rules),
+            }
+        )
+
+    shops_for_ai = list(
+        dict.fromkeys(
+            r["shop_name"] for r in parsed_rows if r["rule_category_id"] is None
+        )
+    )
+    ai_by_shop: dict[str, ShopAiClassification] = {}
+    if shops_for_ai and OPENAI_API_KEY:
+        category_rows = (
+            db.query(Category).order_by(Category.sort_order.asc(), Category.id.asc()).all()
+        )
+        cat_tuples = [(int(cast(Any, c.id)), str(c.name)) for c in category_rows]
+        if cat_tuples:
+            try:
+                ai_by_shop = await classify_shop_names_openai(
+                    api_key=OPENAI_API_KEY,
+                    model=OPENAI_MODEL,
+                    confidence_threshold=AI_CLASSIFICATION_CONFIDENCE_THRESHOLD,
+                    categories=cat_tuples,
+                    shop_names=shops_for_ai,
+                )
+            except Exception:
+                logger.exception("AI classification aborted")
+                ai_by_shop = {}
+    elif shops_for_ai:
+        logger.info("OPENAI_API_KEY is not set; skipping AI classification")
+
+    statement_id = int(cast(Any, statement).id)
+    for row in parsed_rows:
+        rule_cat = cast(Optional[int], row["rule_category_id"])
+        category_id: Optional[int] = rule_cat
+        classified_by: Optional[str] = "rule" if rule_cat is not None else None
+        ai_confidence: Optional[float] = None
+        ai_raw_response: Optional[str] = None
+
+        if category_id is None:
+            ai_result = ai_by_shop.get(row["shop_name"])
+            if ai_result is not None:
+                category_id = ai_result.category_id
+                classified_by = ai_result.classified_by
+                ai_confidence = ai_result.ai_confidence
+                ai_raw_response = ai_result.ai_raw_response
+
         if category_id is None:
             unclassified_count += 1
-        statement_id = int(cast(Any, statement).id)
+
         item = StatementItem(
             statement_id=statement_id,
-            used_at=used_at,
-            shop_name=shop_name,
-            amount=amount,
-            card_holder=_normalize_card_holder(str(row.get("利用者", "")).strip()),
+            used_at=row["used_at"],
+            shop_name=row["shop_name"],
+            amount=row["amount"],
+            card_holder=row["card_holder"],
             category_id=category_id,
             classified_by=classified_by,
+            ai_confidence=ai_confidence,
+            ai_raw_response=ai_raw_response,
             source="csv",
         )
         db.add(item)
@@ -136,7 +209,7 @@ async def upload_statement(
     )
 
 
-@router.get("", response_model=list[StatementItemResponse])
+@router.get("", response_model=List[StatementItemResponse])
 def list_statements(
     year: Optional[int] = None,
     month: Optional[int] = None,
@@ -169,6 +242,8 @@ def patch_statement_item(item_id: int, body: StatementItemUpdateRequest, db: Ses
     item_obj = cast(Any, item)
     item_obj.category_id = body.category_id
     item_obj.classified_by = "manual"
+    item_obj.ai_confidence = None
+    item_obj.ai_raw_response = None
     db.commit()
     db.refresh(item)
     return item
@@ -203,15 +278,20 @@ def get_month_summary(year: int, month: int, db: Session = Depends(get_db)):
 
 @router.get("/summary/by-holder", response_model=StatementByHolderSummaryResponse)
 def get_month_summary_by_holder(year: int, month: int, db: Session = Depends(get_db)):
+    holder_expr = func.coalesce(
+        StatementItem.card_holder,
+        literal_column("'共通'"),
+    ).label("card_holder")
+    amount_sum = func.sum(StatementItem.amount)
     totals = (
         db.query(
-            func.coalesce(StatementItem.card_holder, "共通").label("card_holder"),
-            func.sum(StatementItem.amount).label("amount"),
+            holder_expr,
+            amount_sum.label("amount"),
         )
         .join(Statement, Statement.id == StatementItem.statement_id)
         .filter(Statement.year == year, Statement.month == month)
-        .group_by(func.coalesce(StatementItem.card_holder, "共通"))
-        .order_by(func.sum(StatementItem.amount).desc())
+        .group_by(holder_expr)
+        .order_by(amount_sum.desc())
         .all()
     )
     return StatementByHolderSummaryResponse(
