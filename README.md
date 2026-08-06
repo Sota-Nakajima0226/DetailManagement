@@ -37,6 +37,8 @@ python -m alembic upgrade head
 ```bash
 cd frontend
 flutter pub get
+cp .env.example .env
+# .env に SUPABASE_URL / SUPABASE_ANON_KEY を設定（Project Settings → API）
 ```
 
 Web 用の `web/` がまだない場合は、`frontend` 内で `flutter create . --platforms=web` などで追加できます。
@@ -95,9 +97,25 @@ FLUTTER_DEVICE=chrome ./scripts/dev.sh all
 | `WEB_BIND_HOST` | Flutter web-server の待受 | `0.0.0.0` |
 | `LAN_HOST` | PC の LAN IP（API をフロントに渡す用途） | OS から自動検出 |
 | `API_BASE_URL` | フロントに埋め込む API のベース URL | `http://<LAN_HOST>:<BACKEND_PORT>` |
+| `SUPABASE_URL` | Supabase Project URL（`frontend/.env` でも可） | なし（未設定時はフロント起動エラー） |
+| `SUPABASE_ANON_KEY` | Supabase anon public キー（`frontend/.env` でも可） | なし |
 | `FLUTTER_DEVICE` | `flutter run -d` のデバイス | `web-server` |
 
 ローカルだけに閉じたい場合は `BACKEND_BIND_HOST=127.0.0.1` などにしてください。
+
+### フロントエンド認証（Supabase Auth）
+
+- 起動時に Supabase でログイン。セッションは SDK が Web では `localStorage` に保持する。
+- ログアウトは明細・グラフ画面の AppBar メニュー「ログアウト」。
+- 手動起動例（`frontend/.env` 未使用時）:
+
+```bash
+cd frontend
+flutter run -d web-server \
+  --dart-define=API_BASE_URL=http://127.0.0.1:8000 \
+  --dart-define=SUPABASE_URL=https://your-project.supabase.co \
+  --dart-define=SUPABASE_ANON_KEY=your-anon-key
+```
 
 ### AI分類設定
 

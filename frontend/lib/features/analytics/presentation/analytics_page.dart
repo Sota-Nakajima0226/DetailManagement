@@ -1,21 +1,23 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/api_providers.dart';
 import '../../../core/presentation/main_app_bar_actions.dart';
 import '../../statements/data/statements_api.dart';
 import '../../statements/models/category_item.dart';
 
-class AnalyticsPage extends StatefulWidget {
+class AnalyticsPage extends ConsumerStatefulWidget {
   const AnalyticsPage({super.key});
 
   @override
-  State<AnalyticsPage> createState() => _AnalyticsPageState();
+  ConsumerState<AnalyticsPage> createState() => _AnalyticsPageState();
 }
 
 enum _AnalyticsTab { byCategory, monthlyTrend }
 
-class _AnalyticsPageState extends State<AnalyticsPage> {
-  final StatementsApi _api = StatementsApi();
+class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
+  late final StatementsApi _api;
   final DateTime _now = DateTime.now();
   late int _year;
   late int _month;
@@ -31,6 +33,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   @override
   void initState() {
     super.initState();
+    _api = ref.read(statementsApiProvider);
     _year = _now.year;
     _month = _now.month;
     _load();
@@ -136,7 +139,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('グラフ・集計'),
-        actions: buildMainAppBarActions(context),
+        actions: buildMainAppBarActions(context, ref),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(8, 4, 8, 16),

@@ -95,6 +95,14 @@
 | メール認証 | Supabase Auth（メール+パスワード） | 高 |
 | ユーザー管理 | 夫・妻の2アカウント運用 | 高 |
 
+#### 環境別の認証方針
+
+- 本番・開発ともに Supabase Auth を使い、認証コードパスを完全に1本化する。
+- 環境ごとに別の Supabase プロジェクト（dev / prod）を用意し、`SUPABASE_JWT_SECRET` を切り替える。
+- バックエンドは access token (JWT, HS256) を `SUPABASE_JWT_SECRET` でローカル検証し、毎リクエストでの Supabase API 呼び出しは行わない。
+- 検証後の `sub`（Auth の UUID）で `users` テーブルを引き、未登録ユーザーは 403 を返す。
+- ユニットテストでは FastAPI の `app.dependency_overrides[get_current_user]` で固定ユーザーを注入し、JWT 発行や Supabase 接続を介さず認証層を通す。
+
 ### 4.7 将来機能
 
 | 機能 | 詳細 | 優先度 |
@@ -121,7 +129,7 @@
 | フロントエンド | Flutter（Dart）Webビルド | iOS/Android/Webを1コードベースで運用しやすいため |
 | 状態管理 | Riverpod | Flutterとの相性がよく、テストしやすいため |
 | HTTPクライアント | Dio | インターセプターやエラーハンドリングを実装しやすいため |
-| バックエンド | Python + FastAPI | CSV/PDF処理やAI連携を実装しやすいため |
+| バックエンド | Python 3.11 + FastAPI | CSV/PDF処理やAI連携を実装しやすいため |
 | ORM | SQLAlchemy | FastAPI構成で標準的に利用できるため |
 | データベース | PostgreSQL（Supabase） | 無料枠があり、運用管理もしやすいため |
 | ファイルストレージ | Supabase Storage | DB/認証と同一基盤で管理を統一できるため |

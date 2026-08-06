@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/api_providers.dart';
 import '../../statements/data/statements_api.dart';
 
-class RulesPage extends StatefulWidget {
+class RulesPage extends ConsumerStatefulWidget {
   const RulesPage({super.key});
 
   @override
-  State<RulesPage> createState() => _RulesPageState();
+  ConsumerState<RulesPage> createState() => _RulesPageState();
 }
 
-class _RulesPageState extends State<RulesPage> {
-  final StatementsApi _api = StatementsApi();
+class _RulesPageState extends ConsumerState<RulesPage> {
+  late final StatementsApi _api;
   List<Map<String, dynamic>> _rules = <Map<String, dynamic>>[];
   List<Map<String, dynamic>> _categories = <Map<String, dynamic>>[];
   bool _loading = false;
@@ -19,6 +21,7 @@ class _RulesPageState extends State<RulesPage> {
   @override
   void initState() {
     super.initState();
+    _api = ref.read(statementsApiProvider);
     _load();
   }
 

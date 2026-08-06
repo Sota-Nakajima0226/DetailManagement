@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/api_providers.dart';
 import '../../../core/presentation/main_app_bar_actions.dart';
 import '../data/statements_api.dart';
 import '../models/category_item.dart';
 import '../models/statement_item.dart';
 import 'statement_classification_page.dart';
 
-class StatementsListPage extends StatefulWidget {
+class StatementsListPage extends ConsumerStatefulWidget {
   const StatementsListPage({super.key});
 
   @override
-  State<StatementsListPage> createState() => _StatementsListPageState();
+  ConsumerState<StatementsListPage> createState() => _StatementsListPageState();
 }
 
-class _StatementsListPageState extends State<StatementsListPage> {
-  final StatementsApi _api = StatementsApi();
+class _StatementsListPageState extends ConsumerState<StatementsListPage> {
+  late final StatementsApi _api;
   final DateTime _now = DateTime.now();
 
   late int _selectedYear;
@@ -31,6 +33,7 @@ class _StatementsListPageState extends State<StatementsListPage> {
   @override
   void initState() {
     super.initState();
+    _api = ref.read(statementsApiProvider);
     _selectedYear = _now.year;
     _selectedMonth = _now.month;
     _loadInitial();
@@ -311,6 +314,7 @@ class _StatementsListPageState extends State<StatementsListPage> {
         actions: [
           ...buildMainAppBarActions(
             context,
+            ref,
             uploadTargetYear: _selectedYear,
             uploadTargetMonth: _selectedMonth,
           ),

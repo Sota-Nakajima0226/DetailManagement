@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/api_providers.dart';
 import '../data/statements_api.dart';
 import '../models/category_item.dart';
 import '../models/statement_item.dart';
 
-class StatementClassificationPage extends StatefulWidget {
+class StatementClassificationPage extends ConsumerStatefulWidget {
   const StatementClassificationPage({
     super.key,
     required this.statement,
@@ -15,12 +17,13 @@ class StatementClassificationPage extends StatefulWidget {
   final List<CategoryItem> categories;
 
   @override
-  State<StatementClassificationPage> createState() =>
+  ConsumerState<StatementClassificationPage> createState() =>
       _StatementClassificationPageState();
 }
 
-class _StatementClassificationPageState extends State<StatementClassificationPage> {
-  final StatementsApi _api = StatementsApi();
+class _StatementClassificationPageState
+    extends ConsumerState<StatementClassificationPage> {
+  late final StatementsApi _api;
   bool _isSaving = false;
   String? _errorMessage;
   int? _selectedCategoryId;
@@ -28,6 +31,7 @@ class _StatementClassificationPageState extends State<StatementClassificationPag
   @override
   void initState() {
     super.initState();
+    _api = ref.read(statementsApiProvider);
     _selectedCategoryId = widget.statement.categoryId;
   }
 

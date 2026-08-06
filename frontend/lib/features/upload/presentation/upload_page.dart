@@ -2,11 +2,13 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/api_providers.dart';
 import '../../statements/data/statements_api.dart';
 import '../models/upload_result.dart';
 
-class UploadPage extends StatefulWidget {
+class UploadPage extends ConsumerStatefulWidget {
   const UploadPage({
     super.key,
     this.initialYear,
@@ -17,11 +19,11 @@ class UploadPage extends StatefulWidget {
   final int? initialMonth;
 
   @override
-  State<UploadPage> createState() => _UploadPageState();
+  ConsumerState<UploadPage> createState() => _UploadPageState();
 }
 
-class _UploadPageState extends State<UploadPage> {
-  final StatementsApi _api = StatementsApi();
+class _UploadPageState extends ConsumerState<UploadPage> {
+  late final StatementsApi _api;
   final DateTime _now = DateTime.now();
 
   String? _fileName;
@@ -35,6 +37,7 @@ class _UploadPageState extends State<UploadPage> {
   @override
   void initState() {
     super.initState();
+    _api = ref.read(statementsApiProvider);
     final iy = widget.initialYear;
     final im = widget.initialMonth;
     if (iy != null && im != null) {

@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/api_providers.dart';
 import '../../statements/data/statements_api.dart';
 
-class ManualExpensesPage extends StatefulWidget {
+class ManualExpensesPage extends ConsumerStatefulWidget {
   const ManualExpensesPage({super.key});
 
   @override
-  State<ManualExpensesPage> createState() => _ManualExpensesPageState();
+  ConsumerState<ManualExpensesPage> createState() => _ManualExpensesPageState();
 }
 
-class _ManualExpensesPageState extends State<ManualExpensesPage> {
-  final StatementsApi _api = StatementsApi();
+class _ManualExpensesPageState extends ConsumerState<ManualExpensesPage> {
+  late final StatementsApi _api;
   final DateTime _now = DateTime.now();
   late int _year;
   late int _month;
@@ -22,6 +24,7 @@ class _ManualExpensesPageState extends State<ManualExpensesPage> {
   @override
   void initState() {
     super.initState();
+    _api = ref.read(statementsApiProvider);
     _year = _now.year;
     _month = _now.month;
     _load();

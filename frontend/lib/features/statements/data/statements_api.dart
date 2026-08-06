@@ -1,12 +1,11 @@
 import 'package:dio/dio.dart';
 
-import '../../../core/config/app_config.dart';
 import '../../upload/models/upload_result.dart';
 import '../models/category_item.dart';
 import '../models/statement_item.dart';
 
 class StatementsApi {
-  StatementsApi() : _dio = Dio(BaseOptions(baseUrl: AppConfig.apiBaseUrl));
+  StatementsApi(this._dio);
 
   final Dio _dio;
 

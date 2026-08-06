@@ -25,8 +25,9 @@
 ### 2.1 認証
 
 - `/health` を除く全エンドポイントは `Authorization: Bearer <JWT>` を必須とする。
-- JWT は Supabase Auth の access token（HS256 署名）を想定する。
-- サーバーは Supabase API を呼ばずに `SUPABASE_JWT_SECRET` でローカル署名検証する。
+- JWT は Supabase Auth の access token（JWT Signing Keys: **ES256** / RS256 等）を想定する。
+- サーバーは `SUPABASE_URL` の JWKS（`/auth/v1/.well-known/jwks.json`）で公開鍵検証する（Supabase API は都度呼ばない）。
+- Legacy HS256 トークンのみのプロジェクトでは、追加で `SUPABASE_JWT_SECRET` による検証にフォールバック可能。
 - 検証後、JWT の `sub`（Supabase Auth の UUID）で `users` テーブルを引き、
   未登録ユーザーは 403 を返す（事前に夫・妻の 2 アカウントを `users` に登録しておく）。
 - 開発環境は本番とは別の Supabase プロジェクトを用意し、`SUPABASE_JWT_SECRET` を切り替えるだけで本番と同じ認証コードパスを通す。
