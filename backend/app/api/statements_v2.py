@@ -47,6 +47,9 @@ from app.schemas import (
     StatementSummaryResponse,
     StatementUploadResponse,
     StatementUploadResultItem,
+    UploadStatusIssuer,
+    UploadStatusResponse,
+    UploadStatusUploadedIssuer,
     YearMonthValue,
 )
 
@@ -359,16 +362,90 @@ async def upload_statement(
     return StatementUploadResponse(results=results)
 
 
+def _item_to_response(
+    item: StatementItem,
+    card_issuer_code: Optional[str],
+    card_issuer_name: Optional[str],
+) -> StatementItemResponse:
+    return StatementItemResponse(
+        id=int(cast(Any, item).id),
+        used_at=cast(Any, item).used_at,
+        shop_name=str(item.shop_name),
+        amount=int(cast(Any, item).amount),
+        card_holder=cast(Any, item).card_holder,
+        category_id=cast(Any, item).category_id,
+        classified_by=cast(Any, item).classified_by,
+        ai_confidence=cast(Any, item).ai_confidence,
+        needs_ai_review=bool(item.needs_ai_review),
+        source=str(item.source or "csv"),
+        created_at=cast(Any, item).created_at,
+        card_issuer_code=card_issuer_code,
+        card_issuer_name=card_issuer_name,
+    )
+
+
+@router.get("/upload-status", response_model=UploadStatusResponse)
+def get_upload_status(year: int, month: int, db: Session = Depends(get_db)):
+    expected_rows = (
+        db.query(CardIssuer)
+        .filter(
+            CardIssuer.is_active.is_(True),
+            CardIssuer.include_in_reminder.is_(True),
+        )
+        .order_by(CardIssuer.sort_order.asc(), CardIssuer.id.asc())
+        .all()
+    )
+    expected = [
+        UploadStatusIssuer(code=str(i.code), display_name=str(i.display_name))
+        for i in expected_rows
+    ]
+    expected_codes = {e.code for e in expected}
+
+    uploaded: list[UploadStatusUploadedIssuer] = []
+    if expected_codes:
+        uploaded_rows = (
+            db.query(Statement, CardIssuer)
+            .join(CardIssuer, CardIssuer.id == Statement.card_issuer_id)
+            .filter(Statement.year == year, Statement.month == month)
+            .filter(CardIssuer.code.in_(expected_codes))
+            .order_by(CardIssuer.sort_order.asc(), CardIssuer.id.asc())
+            .all()
+        )
+        uploaded = [
+            UploadStatusUploadedIssuer(
+                code=str(issuer.code),
+                display_name=str(issuer.display_name),
+                statement_id=int(cast(Any, statement).id),
+                uploaded_at=cast(Any, statement).uploaded_at,
+            )
+            for statement, issuer in uploaded_rows
+        ]
+    uploaded_codes = {u.code for u in uploaded}
+    missing = [e for e in expected if e.code not in uploaded_codes]
+    return UploadStatusResponse(
+        year=year,
+        month=month,
+        expected_issuers=expected,
+        uploaded=uploaded,
+        missing=missing,
+    )
+
+
 @router.get("", response_model=List[StatementItemResponse])
 def list_statements(
     year: Optional[int] = None,
     month: Optional[int] = None,
     category: Optional[int] = None,
     card_holder: Optional[str] = None,
+    card_issuer: Optional[str] = None,
     is_unclassified: Optional[bool] = None,
     db: Session = Depends(get_db),
 ):
-    query = db.query(StatementItem).join(Statement, Statement.id == StatementItem.statement_id)
+    query = (
+        db.query(StatementItem, CardIssuer.code, CardIssuer.display_name)
+        .join(Statement, Statement.id == StatementItem.statement_id)
+        .join(CardIssuer, CardIssuer.id == Statement.card_issuer_id)
+    )
     if year is not None:
         query = query.filter(Statement.year == year)
     if month is not None:
@@ -377,18 +454,31 @@ def list_statements(
         query = query.filter(StatementItem.category_id == category)
     if card_holder:
         query = query.filter(StatementItem.card_holder == card_holder)
+    if card_issuer:
+        query = query.filter(CardIssuer.code == card_issuer)
     if is_unclassified is True:
         query = query.filter(StatementItem.category_id.is_(None))
     if is_unclassified is False:
         query = query.filter(StatementItem.category_id.is_not(None))
-    return query.order_by(desc(StatementItem.used_at), desc(StatementItem.id)).all()
+    rows = query.order_by(desc(StatementItem.used_at), desc(StatementItem.id)).all()
+    return [
+        _item_to_response(item, str(code) if code is not None else None, str(name) if name is not None else None)
+        for item, code, name in rows
+    ]
 
 
 @router.patch("/items/{item_id}", response_model=StatementItemResponse)
 def patch_statement_item(item_id: int, body: StatementItemUpdateRequest, db: Session = Depends(get_db)):
-    item = db.query(StatementItem).filter(StatementItem.id == item_id).first()
-    if item is None:
+    row = (
+        db.query(StatementItem, CardIssuer.code, CardIssuer.display_name)
+        .join(Statement, Statement.id == StatementItem.statement_id)
+        .join(CardIssuer, CardIssuer.id == Statement.card_issuer_id)
+        .filter(StatementItem.id == item_id)
+        .first()
+    )
+    if row is None:
         raise HTTPException(status_code=404, detail="Statement item not found")
+    item, code, name = row
     item_obj = cast(Any, item)
     item_obj.category_id = body.category_id
     item_obj.classified_by = "manual"
@@ -396,21 +486,35 @@ def patch_statement_item(item_id: int, body: StatementItemUpdateRequest, db: Ses
     item_obj.ai_raw_response = None
     db.commit()
     db.refresh(item)
-    return item
+    return _item_to_response(
+        item,
+        str(code) if code is not None else None,
+        str(name) if name is not None else None,
+    )
 
 
 @router.get("/summary", response_model=StatementSummaryResponse)
-def get_month_summary(year: int, month: int, db: Session = Depends(get_db)):
-    totals = (
+def get_month_summary(
+    year: int,
+    month: int,
+    card_issuer: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    query = (
         db.query(
             StatementItem.category_id,
             func.coalesce(Category.name, "未分類").label("category_name"),
             func.sum(StatementItem.amount).label("amount"),
         )
         .join(Statement, Statement.id == StatementItem.statement_id)
+        .join(CardIssuer, CardIssuer.id == Statement.card_issuer_id)
         .outerjoin(Category, Category.id == StatementItem.category_id)
         .filter(Statement.year == year, Statement.month == month)
-        .group_by(StatementItem.category_id, Category.name)
+    )
+    if card_issuer:
+        query = query.filter(CardIssuer.code == card_issuer)
+    totals = (
+        query.group_by(StatementItem.category_id, Category.name)
         .order_by(func.sum(StatementItem.amount).desc())
         .all()
     )
@@ -427,23 +531,29 @@ def get_month_summary(year: int, month: int, db: Session = Depends(get_db)):
 
 
 @router.get("/summary/by-holder", response_model=StatementByHolderSummaryResponse)
-def get_month_summary_by_holder(year: int, month: int, db: Session = Depends(get_db)):
+def get_month_summary_by_holder(
+    year: int,
+    month: int,
+    card_issuer: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
     holder_expr = func.coalesce(
         StatementItem.card_holder,
         literal_column("'共通'"),
     ).label("card_holder")
     amount_sum = func.sum(StatementItem.amount)
-    totals = (
+    query = (
         db.query(
             holder_expr,
             amount_sum.label("amount"),
         )
         .join(Statement, Statement.id == StatementItem.statement_id)
+        .join(CardIssuer, CardIssuer.id == Statement.card_issuer_id)
         .filter(Statement.year == year, Statement.month == month)
-        .group_by(holder_expr)
-        .order_by(amount_sum.desc())
-        .all()
     )
+    if card_issuer:
+        query = query.filter(CardIssuer.code == card_issuer)
+    totals = query.group_by(holder_expr).order_by(amount_sum.desc()).all()
     return StatementByHolderSummaryResponse(
         year=year,
         month=month,

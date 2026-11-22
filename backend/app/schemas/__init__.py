@@ -23,6 +23,8 @@ class StatementItemResponse(BaseModel):
     needs_ai_review: bool = False
     source: str
     created_at: datetime
+    card_issuer_code: Optional[str] = None
+    card_issuer_name: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -54,6 +56,26 @@ class DetectIssuerResponse(BaseModel):
     detected_display_name: Optional[str] = None
     confidence: Optional[str] = None
     candidates: List[DetectIssuerCandidate]
+
+
+class UploadStatusIssuer(BaseModel):
+    code: str
+    display_name: str
+
+
+class UploadStatusUploadedIssuer(BaseModel):
+    code: str
+    display_name: str
+    statement_id: int
+    uploaded_at: Optional[datetime] = None
+
+
+class UploadStatusResponse(BaseModel):
+    year: int
+    month: int
+    expected_issuers: List[UploadStatusIssuer]
+    uploaded: List[UploadStatusUploadedIssuer]
+    missing: List[UploadStatusIssuer]
 
 
 class StatementSummaryItem(BaseModel):
