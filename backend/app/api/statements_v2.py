@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import csv
-import io
 import logging
 import re
-from datetime import datetime
 from typing import Any, List, Optional, cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -31,7 +28,9 @@ from app.services.ai_category_classifier import (
     classify_shop_names_openai,
 )
 from app.services.csv_import_engine import (
+    CsvImportError,
     header_signature_matches,
+    parse_csv_with_profile,
     peek_csv_headers,
 )
 from app.schemas import (
@@ -47,6 +46,7 @@ from app.schemas import (
     StatementSummaryItem,
     StatementSummaryResponse,
     StatementUploadResponse,
+    StatementUploadResultItem,
     YearMonthValue,
 )
 
@@ -57,18 +57,6 @@ logger = logging.getLogger(__name__)
 
 def _yyyymm(year: int, month: int) -> int:
     return year * 100 + month
-
-
-def _normalize_card_holder(raw: Optional[str]) -> Optional[str]:
-    if raw == "本人":
-        return "夫"
-    if raw == "家族":
-        return "妻"
-    return raw
-
-
-def _parse_used_at(raw: str):
-    return datetime.strptime(raw, "%Y/%m/%d").date()
 
 
 def _classify_by_rules(shop_name: str, rules: list[ClassificationRule]) -> Optional[int]:
@@ -84,15 +72,107 @@ def _classify_by_rules(shop_name: str, rules: list[ClassificationRule]) -> Optio
     return None
 
 
-def _rakuten_issuer_id(db: Session) -> int:
-    """P2 までの暫定: 単一CSV取込は常に楽天 issuer に紐づける。"""
-    issuer = db.query(CardIssuer).filter(CardIssuer.code == "rakuten").first()
-    if issuer is None:
+def _active_issuer_profiles(db: Session) -> list[tuple[CardIssuer, CsvImportProfile]]:
+    # SQLAlchemy の query(...).all() はスタブ上 Row/Any になりがちなので明示キャストする。
+    rows = (
+        db.query(CardIssuer, CsvImportProfile)
+        .join(CsvImportProfile, CsvImportProfile.card_issuer_id == CardIssuer.id)
+        .filter(CardIssuer.is_active.is_(True))
+        .order_by(CardIssuer.sort_order.asc(), CardIssuer.id.asc())
+        .all()
+    )
+    return cast(list[tuple[CardIssuer, CsvImportProfile]], rows)
+
+
+def _match_issuer_candidates(
+    content: bytes,
+    pairs: list[tuple[CardIssuer, CsvImportProfile]],
+) -> list[DetectIssuerCandidate]:
+    candidates: list[DetectIssuerCandidate] = []
+    for issuer, profile in pairs:
+        encoding = str(cast(Any, profile).encoding or "utf-8")
+        headers = peek_csv_headers(content, encoding)
+        if not headers:
+            continue
+        signature = list(cast(Any, profile).header_signature or [])
+        if header_signature_matches(headers, signature):
+            candidates.append(
+                DetectIssuerCandidate(
+                    code=str(issuer.code),
+                    display_name=str(issuer.display_name),
+                )
+            )
+    return candidates
+
+
+def _resolve_issuer_code(
+    content: bytes,
+    explicit_code: Optional[str],
+    pairs: list[tuple[CardIssuer, CsvImportProfile]],
+    file_label: str,
+) -> str:
+    if explicit_code:
+        code = explicit_code.strip()
+        if not code:
+            raise HTTPException(status_code=400, detail=f"Empty card_issuer_code for {file_label}")
+        known = {str(issuer.code) for issuer, _ in pairs}
+        if code not in known:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown or inactive card_issuer_code '{code}' for {file_label}",
+            )
+        return code
+
+    candidates = _match_issuer_candidates(content, pairs)
+    if len(candidates) != 1:
         raise HTTPException(
-            status_code=500,
-            detail="card issuer 'rakuten' is not seeded",
+            status_code=400,
+            detail=(
+                f"Could not uniquely detect issuer for {file_label}; "
+                "send card_issuer_codes"
+            ),
         )
-    return int(cast(Any, issuer).id)
+    return candidates[0].code
+
+
+def _profile_for_code(
+    pairs: list[tuple[CardIssuer, CsvImportProfile]],
+    code: str,
+) -> tuple[CardIssuer, CsvImportProfile]:
+    for issuer, profile in pairs:
+        if str(issuer.code) == code:
+            return issuer, profile
+    raise HTTPException(status_code=400, detail=f"Unknown card_issuer_code '{code}'")
+
+
+async def _classify_rows(
+    db: Session,
+    shop_names_needing_ai: list[str],
+) -> dict[str, ShopAiClassification]:
+    ai_by_shop: dict[str, ShopAiClassification] = {}
+    if not shop_names_needing_ai:
+        return ai_by_shop
+    if not OPENAI_API_KEY:
+        logger.info("OPENAI_API_KEY is not set; skipping AI classification")
+        return ai_by_shop
+
+    category_rows = (
+        db.query(Category).order_by(Category.sort_order.asc(), Category.id.asc()).all()
+    )
+    cat_tuples = [(int(cast(Any, c.id)), str(c.name)) for c in category_rows]
+    if not cat_tuples:
+        return ai_by_shop
+    try:
+        return await classify_shop_names_openai(
+            api_key=OPENAI_API_KEY,
+            model=OPENAI_MODEL,
+            confidence_threshold=AI_CLASSIFICATION_CONFIDENCE_THRESHOLD,
+            categories=cat_tuples,
+            shop_names=shop_names_needing_ai,
+        )
+    except Exception:
+        logger.exception("AI classification aborted")
+        return {}
 
 
 @router.post("/detect-issuer", response_model=DetectIssuerResponse)
@@ -109,29 +189,7 @@ async def detect_issuer(
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
 
-    pairs = (
-        db.query(CardIssuer, CsvImportProfile)
-        .join(CsvImportProfile, CsvImportProfile.card_issuer_id == CardIssuer.id)
-        .filter(CardIssuer.is_active.is_(True))
-        .order_by(CardIssuer.sort_order.asc(), CardIssuer.id.asc())
-        .all()
-    )
-
-    candidates: list[DetectIssuerCandidate] = []
-    for issuer, profile in pairs:
-        encoding = str(cast(Any, profile).encoding or "utf-8")
-        headers = peek_csv_headers(content, encoding)
-        if not headers:
-            continue
-        signature = list(cast(Any, profile).header_signature or [])
-        if header_signature_matches(headers, signature):
-            candidates.append(
-                DetectIssuerCandidate(
-                    code=str(issuer.code),
-                    display_name=str(issuer.display_name),
-                )
-            )
-
+    candidates = _match_issuer_candidates(content, _active_issuer_profiles(db))
     if len(candidates) == 1:
         only = candidates[0]
         return DetectIssuerResponse(
@@ -151,155 +209,154 @@ async def detect_issuer(
 
 @router.post("/upload", response_model=StatementUploadResponse, status_code=201)
 async def upload_statement(
-    file: UploadFile = File(...),
     year: int = Form(...),
     month: int = Form(...),
+    files: List[UploadFile] = File(...),
+    card_issuer_codes: Optional[List[str]] = Form(None),
     db: Session = Depends(get_db),
 ):
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="Invalid file name")
-    if not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Only CSV is supported at this moment")
+    if not files:
+        raise HTTPException(status_code=400, detail="At least one file is required")
 
-    content = await file.read()
-    try:
-        reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
-        rows = list(reader)
-        columns = set(reader.fieldnames or [])
-    except UnicodeDecodeError as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to decode CSV: {exc}") from exc
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to parse CSV: {exc}") from exc
-
-    required_columns = {"利用日", "利用店名・商品名", "利用者", "利用金額"}
-    if not required_columns.issubset(columns):
-        raise HTTPException(status_code=400, detail="CSV columns are invalid")
-
-    # P2 までは issuer 選択なし。常に楽天へ紐づけ（同年月の楽天行のみ置換）。
-    rakuten_id = _rakuten_issuer_id(db)
-    statement = (
-        db.query(Statement)
-        .filter(
-            Statement.year == year,
-            Statement.month == month,
-            Statement.card_issuer_id == rakuten_id,
+    codes = list(card_issuer_codes) if card_issuer_codes else []
+    if codes and len(codes) != len(files):
+        raise HTTPException(
+            status_code=400,
+            detail="files and card_issuer_codes must have the same length",
         )
-        .first()
-    )
-    if statement is None:
-        statement = Statement(
-            year=year,
-            month=month,
-            card_issuer_id=rakuten_id,
-            file_url=file.filename,
+
+    pairs = _active_issuer_profiles(db)
+    if not pairs:
+        raise HTTPException(status_code=500, detail="No active card issuers with profiles")
+
+    file_payloads: list[tuple[str, bytes, Optional[str]]] = []
+    for index, upload in enumerate(files):
+        label = upload.filename or f"files[{index}]"
+        if not upload.filename:
+            raise HTTPException(status_code=400, detail=f"Invalid file name for {label}")
+        if not upload.filename.lower().endswith(".csv"):
+            raise HTTPException(status_code=400, detail=f"Only CSV is supported: {label}")
+        content = await upload.read()
+        if not content:
+            raise HTTPException(status_code=400, detail=f"Empty file: {label}")
+        explicit = codes[index] if codes else None
+        file_payloads.append((upload.filename, content, explicit))
+
+    resolved_codes = [
+        _resolve_issuer_code(content, explicit, pairs, filename)
+        for filename, content, explicit in file_payloads
+    ]
+    if len(set(resolved_codes)) != len(resolved_codes):
+        raise HTTPException(
+            status_code=400,
+            detail="Duplicate card_issuer_code in the same upload request",
         )
-        db.add(statement)
-        db.flush()
-    else:
-        statement_obj = cast(Any, statement)
-        db.query(StatementItem).filter(StatementItem.statement_id == statement_obj.id).delete()
-        statement_obj.file_url = file.filename
 
     rules = db.query(ClassificationRule).order_by(desc(ClassificationRule.priority)).all()
-    inserted_count = 0
-    unclassified_count = 0
-    error_count = 0
+    results: list[StatementUploadResultItem] = []
 
-    parsed_rows: list[dict[str, Any]] = []
-    for row in rows:
-        used_at_raw = str(row.get("利用日") or "").strip()
-        shop_name = str(row.get("利用店名・商品名") or "").strip()
-        amount_raw = str(row.get("利用金額") or "").strip()
-        if not used_at_raw or not shop_name or not amount_raw:
-            continue
-        if used_at_raw == "nan" or shop_name == "nan" or amount_raw == "nan":
-            continue
+    for (filename, content, _), issuer_code in zip(file_payloads, resolved_codes):
+        issuer, profile = _profile_for_code(pairs, issuer_code)
+        issuer_id = int(cast(Any, issuer).id)
 
         try:
-            amount = int(float(amount_raw))
-            used_at = _parse_used_at(used_at_raw)
-        except ValueError:
-            error_count += 1
-            continue
+            parsed = parse_csv_with_profile(content, profile)
+        except CsvImportError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-        parsed_rows.append(
-            {
-                "used_at": used_at,
-                "shop_name": shop_name,
-                "amount": amount,
-                "card_holder": _normalize_card_holder(str(row.get("利用者") or "").strip()),
-                "rule_category_id": _classify_by_rules(shop_name, rules),
-            }
+        statement = (
+            db.query(Statement)
+            .filter(
+                Statement.year == year,
+                Statement.month == month,
+                Statement.card_issuer_id == issuer_id,
+            )
+            .first()
         )
+        if statement is None:
+            statement = Statement(
+                year=year,
+                month=month,
+                card_issuer_id=issuer_id,
+                file_url=filename,
+            )
+            db.add(statement)
+            db.flush()
+        else:
+            statement_obj = cast(Any, statement)
+            db.query(StatementItem).filter(
+                StatementItem.statement_id == statement_obj.id
+            ).delete()
+            statement_obj.file_url = filename
 
-    shops_for_ai = list(
-        dict.fromkeys(
-            r["shop_name"] for r in parsed_rows if r["rule_category_id"] is None
+        prepared: list[dict[str, Any]] = []
+        for row in parsed.rows:
+            prepared.append(
+                {
+                    "used_at": row.used_at,
+                    "shop_name": row.shop_name,
+                    "amount": row.amount,
+                    "card_holder": row.card_holder,
+                    "rule_category_id": _classify_by_rules(row.shop_name, rules),
+                }
+            )
+
+        shops_for_ai = list(
+            dict.fromkeys(
+                r["shop_name"] for r in prepared if r["rule_category_id"] is None
+            )
         )
-    )
-    ai_by_shop: dict[str, ShopAiClassification] = {}
-    if shops_for_ai and OPENAI_API_KEY:
-        category_rows = (
-            db.query(Category).order_by(Category.sort_order.asc(), Category.id.asc()).all()
-        )
-        cat_tuples = [(int(cast(Any, c.id)), str(c.name)) for c in category_rows]
-        if cat_tuples:
-            try:
-                ai_by_shop = await classify_shop_names_openai(
-                    api_key=OPENAI_API_KEY,
-                    model=OPENAI_MODEL,
-                    confidence_threshold=AI_CLASSIFICATION_CONFIDENCE_THRESHOLD,
-                    categories=cat_tuples,
-                    shop_names=shops_for_ai,
+        ai_by_shop = await _classify_rows(db, shops_for_ai)
+
+        inserted_count = 0
+        unclassified_count = 0
+        statement_id = int(cast(Any, statement).id)
+        for row in prepared:
+            rule_cat = cast(Optional[int], row["rule_category_id"])
+            category_id: Optional[int] = rule_cat
+            classified_by: Optional[str] = "rule" if rule_cat is not None else None
+            ai_confidence: Optional[float] = None
+            ai_raw_response: Optional[str] = None
+
+            if category_id is None:
+                ai_result = ai_by_shop.get(row["shop_name"])
+                if ai_result is not None:
+                    category_id = ai_result.category_id
+                    classified_by = ai_result.classified_by
+                    ai_confidence = ai_result.ai_confidence
+                    ai_raw_response = ai_result.ai_raw_response
+
+            if category_id is None:
+                unclassified_count += 1
+
+            db.add(
+                StatementItem(
+                    statement_id=statement_id,
+                    used_at=row["used_at"],
+                    shop_name=row["shop_name"],
+                    amount=row["amount"],
+                    card_holder=row["card_holder"],
+                    category_id=category_id,
+                    classified_by=classified_by,
+                    ai_confidence=ai_confidence,
+                    ai_raw_response=ai_raw_response,
+                    source="csv",
                 )
-            except Exception:
-                logger.exception("AI classification aborted")
-                ai_by_shop = {}
-    elif shops_for_ai:
-        logger.info("OPENAI_API_KEY is not set; skipping AI classification")
+            )
+            inserted_count += 1
 
-    statement_id = int(cast(Any, statement).id)
-    for row in parsed_rows:
-        rule_cat = cast(Optional[int], row["rule_category_id"])
-        category_id: Optional[int] = rule_cat
-        classified_by: Optional[str] = "rule" if rule_cat is not None else None
-        ai_confidence: Optional[float] = None
-        ai_raw_response: Optional[str] = None
-
-        if category_id is None:
-            ai_result = ai_by_shop.get(row["shop_name"])
-            if ai_result is not None:
-                category_id = ai_result.category_id
-                classified_by = ai_result.classified_by
-                ai_confidence = ai_result.ai_confidence
-                ai_raw_response = ai_result.ai_raw_response
-
-        if category_id is None:
-            unclassified_count += 1
-
-        item = StatementItem(
-            statement_id=statement_id,
-            used_at=row["used_at"],
-            shop_name=row["shop_name"],
-            amount=row["amount"],
-            card_holder=row["card_holder"],
-            category_id=category_id,
-            classified_by=classified_by,
-            ai_confidence=ai_confidence,
-            ai_raw_response=ai_raw_response,
-            source="csv",
+        results.append(
+            StatementUploadResultItem(
+                card_issuer_code=issuer_code,
+                statement_id=statement_id,
+                inserted_count=inserted_count,
+                unclassified_count=unclassified_count,
+                error_count=parsed.error_count,
+            )
         )
-        db.add(item)
-        inserted_count += 1
 
     db.commit()
-    statement_id = int(cast(Any, statement).id)
-    return StatementUploadResponse(
-        statement_id=statement_id,
-        inserted_count=inserted_count,
-        unclassified_count=unclassified_count,
-        error_count=error_count,
-    )
+    return StatementUploadResponse(results=results)
 
 
 @router.get("", response_model=List[StatementItemResponse])

@@ -32,11 +32,16 @@ class StatementItemUpdateRequest(BaseModel):
     category_id: int
 
 
-class StatementUploadResponse(BaseModel):
+class StatementUploadResultItem(BaseModel):
+    card_issuer_code: str
     statement_id: int
     inserted_count: int
     unclassified_count: int
     error_count: int
+
+
+class StatementUploadResponse(BaseModel):
+    results: List[StatementUploadResultItem]
 
 
 class DetectIssuerCandidate(BaseModel):
