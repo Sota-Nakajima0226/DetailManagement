@@ -36,3 +36,5 @@ frontend/web/main.dart.js
 
 # macOS
 .DS_Store
+
+.cursor/skills/
