@@ -10,6 +10,8 @@ class StatementItem {
     this.aiConfidence,
     this.needsAiReview = false,
     required this.source,
+    this.cardIssuerCode,
+    this.cardIssuerName,
   });
 
   final int id;
@@ -22,6 +24,8 @@ class StatementItem {
   final double? aiConfidence;
   final bool needsAiReview;
   final String source;
+  final String? cardIssuerCode;
+  final String? cardIssuerName;
 
   factory StatementItem.fromJson(Map<String, dynamic> json) {
     return StatementItem(
@@ -35,6 +39,8 @@ class StatementItem {
       aiConfidence: (json['ai_confidence'] as num?)?.toDouble(),
       needsAiReview: json['needs_ai_review'] as bool? ?? false,
       source: json['source'] as String? ?? 'csv',
+      cardIssuerCode: json['card_issuer_code'] as String?,
+      cardIssuerName: json['card_issuer_name'] as String?,
     );
   }
 }

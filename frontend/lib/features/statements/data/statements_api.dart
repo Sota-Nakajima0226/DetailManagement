@@ -1,6 +1,11 @@
 import 'package:dio/dio.dart';
 
+import '../../upload/models/detect_issuer_result.dart';
+import '../../upload/models/statement_upload_batch_result.dart';
+import '../../upload/models/upload_file_payload.dart';
 import '../../upload/models/upload_result.dart';
+import '../../upload/models/upload_status.dart';
+import '../models/card_issuer.dart';
 import '../models/category_item.dart';
 import '../models/statement_item.dart';
 
@@ -28,6 +33,7 @@ class StatementsApi {
     required int month,
     int? categoryId,
     String? cardHolder,
+    String? cardIssuer,
     bool? isUnclassified,
   }) async {
     final query = <String, dynamic>{
@@ -39,6 +45,9 @@ class StatementsApi {
     }
     if (cardHolder != null && cardHolder.isNotEmpty) {
       query['card_holder'] = cardHolder;
+    }
+    if (cardIssuer != null && cardIssuer.isNotEmpty) {
+      query['card_issuer'] = cardIssuer;
     }
     if (isUnclassified != null) {
       query['is_unclassified'] = isUnclassified;
@@ -99,13 +108,100 @@ class StatementsApi {
     return UploadResult.fromJson(data);
   }
 
-  Future<Map<String, dynamic>> fetchCategorySummary({
+  Future<DetectIssuerResult> detectIssuer({
+    required String fileName,
+    required List<int> fileBytes,
+  }) async {
+    final formData = FormData();
+    formData.files.add(
+      MapEntry(
+        'file',
+        MultipartFile.fromBytes(fileBytes, filename: fileName),
+      ),
+    );
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/statements/detect-issuer',
+      data: formData,
+    );
+    final data = response.data;
+    if (data == null) {
+      throw Exception('発行会社の判定結果が空です');
+    }
+    return DetectIssuerResult.fromJson(data);
+  }
+
+  Future<StatementUploadBatchResult> uploadStatements({
+    required List<UploadFilePayload> files,
+    required List<String> cardIssuerCodes,
+    required int year,
+    required int month,
+  }) async {
+    if (files.length != cardIssuerCodes.length) {
+      throw ArgumentError('files と cardIssuerCodes の件数を揃えてください');
+    }
+    final formData = FormData();
+    formData.fields.add(MapEntry('year', year.toString()));
+    formData.fields.add(MapEntry('month', month.toString()));
+    for (final file in files) {
+      formData.files.add(
+        MapEntry(
+          'files',
+          MultipartFile.fromBytes(file.bytes, filename: file.fileName),
+        ),
+      );
+    }
+    for (final code in cardIssuerCodes) {
+      formData.fields.add(MapEntry('card_issuer_codes', code));
+    }
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/statements/upload',
+      data: formData,
+    );
+    final data = response.data;
+    if (data == null) {
+      throw Exception('アップロード結果が空です');
+    }
+    return StatementUploadBatchResult.fromJson(data);
+  }
+
+  Future<UploadStatus> fetchUploadStatus({
     required int year,
     required int month,
   }) async {
     final response = await _dio.get<Map<String, dynamic>>(
-      '/statements/summary',
+      '/statements/upload-status',
       queryParameters: {'year': year, 'month': month},
+    );
+    final data = response.data;
+    if (data == null) {
+      throw Exception('取込状況が空です');
+    }
+    return UploadStatus.fromJson(data);
+  }
+
+  Future<List<CardIssuer>> fetchCardIssuers() async {
+    final response = await _dio.get<List<dynamic>>('/card-issuers');
+    final data = response.data ?? <dynamic>[];
+    return data
+        .map((item) => CardIssuer.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> fetchCategorySummary({
+    required int year,
+    required int month,
+    String? cardIssuer,
+  }) async {
+    final query = <String, dynamic>{
+      'year': year,
+      'month': month,
+    };
+    if (cardIssuer != null && cardIssuer.isNotEmpty) {
+      query['card_issuer'] = cardIssuer;
+    }
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/statements/summary',
+      queryParameters: query,
     );
     return response.data ?? <String, dynamic>{};
   }
@@ -113,10 +209,18 @@ class StatementsApi {
   Future<Map<String, dynamic>> fetchHolderSummary({
     required int year,
     required int month,
+    String? cardIssuer,
   }) async {
+    final query = <String, dynamic>{
+      'year': year,
+      'month': month,
+    };
+    if (cardIssuer != null && cardIssuer.isNotEmpty) {
+      query['card_issuer'] = cardIssuer;
+    }
     final response = await _dio.get<Map<String, dynamic>>(
       '/statements/summary/by-holder',
-      queryParameters: {'year': year, 'month': month},
+      queryParameters: query,
     );
     return response.data ?? <String, dynamic>{};
   }
@@ -127,6 +231,7 @@ class StatementsApi {
     required int toYear,
     required int toMonth,
     int? categoryId,
+    String? cardIssuer,
   }) async {
     final query = <String, dynamic>{
       'from_year': fromYear,
@@ -136,6 +241,9 @@ class StatementsApi {
     };
     if (categoryId != null) {
       query['category_id'] = categoryId;
+    }
+    if (cardIssuer != null && cardIssuer.isNotEmpty) {
+      query['card_issuer'] = cardIssuer;
     }
     final response = await _dio.get<Map<String, dynamic>>(
       '/statements/summary/monthly-trend',
