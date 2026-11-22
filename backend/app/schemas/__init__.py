@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -218,6 +218,58 @@ class ManualExpenseUpdate(ManualExpenseBase):
 
 class ManualExpenseResponse(ManualExpenseBase):
     id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class CardIssuerBase(BaseModel):
+    code: str
+    display_name: str
+    is_active: bool = True
+    include_in_reminder: bool = True
+    remind_day_of_month: int = 1
+    sort_order: int = 0
+
+
+class CardIssuerCreate(CardIssuerBase):
+    pass
+
+
+class CardIssuerUpdate(CardIssuerBase):
+    pass
+
+
+class CardIssuerResponse(CardIssuerBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class CsvImportProfileBase(BaseModel):
+    card_issuer_id: int
+    encoding: str = "utf-8"
+    header_signature: List[Any]
+    column_mapping: Dict[str, Any]
+    transforms: Dict[str, Any] = Field(default_factory=dict)
+    skip_rules: List[Any] = Field(default_factory=list)
+    custom_hook: Optional[str] = None
+
+
+class CsvImportProfileCreate(CsvImportProfileBase):
+    pass
+
+
+class CsvImportProfileUpdate(CsvImportProfileBase):
+    pass
+
+
+class CsvImportProfileResponse(CsvImportProfileBase):
+    id: int
+    updated_at: Optional[datetime] = None
     created_at: datetime
 
     class Config:

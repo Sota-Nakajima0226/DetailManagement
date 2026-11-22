@@ -1,7 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import categories, fixed_expenses, health, manual_expenses, rules, statements_v2
+from app.api import (
+    card_issuers,
+    categories,
+    csv_import_profiles,
+    fixed_expenses,
+    health,
+    manual_expenses,
+    rules,
+    statements_v2,
+)
 from app.core.logging import configure_logging
 from app.core.request_logging import RequestLoggingMiddleware
 
@@ -25,3 +34,5 @@ app.include_router(categories.router)
 app.include_router(rules.router)
 app.include_router(fixed_expenses.router)
 app.include_router(manual_expenses.router)
+app.include_router(card_issuers.router)
+app.include_router(csv_import_profiles.router)
