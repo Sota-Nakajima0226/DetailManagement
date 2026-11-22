@@ -244,6 +244,7 @@
   - `to_year`（必須）
   - `to_month`（必須）
   - `category_id`（任意、未指定時は全カテゴリ）
+  - `card_issuer`（任意。`card_issuers.code`。未指定時は全 issuer 合算）
 - レスポンス例:
 
 ```json
