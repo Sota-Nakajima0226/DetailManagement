@@ -190,3 +190,7 @@ flutter run -d web-server --web-hostname 0.0.0.0 --web-port 8080 \
 （`REPLACE_WITH_YOUR_PC_LAN_IP` はプレースホルダです。開発 PC の LAN 上の IP に置き換えてください。）
 
 機密値はリポジトリに含めず、`.env`（コミット対象は `.env.example` のみ）で管理してください。
+
+`sample/` 配下には実明細などの個人情報を置く想定です。`.gitignore` で除外しているため、**追加・コミットしないでください**（ローカル検証専用）。
+
+コミットメッセージは **日本語** で書く（詳細は `.cursor/rules/git-commits.mdc`）。
