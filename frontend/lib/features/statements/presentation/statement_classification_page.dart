@@ -98,6 +98,7 @@ class _StatementClassificationPageState
                     Text('利用日: ${_formatYmd(widget.statement.usedAt)}'),
                     Text('金額: ${widget.statement.amount} 円'),
                     Text('名義人: ${widget.statement.cardHolder ?? '-'}'),
+                    Text('カード発行会社: ${widget.statement.cardIssuerName ?? '-'}'),
                     Text('現在カテゴリ: ${widget.statement.categoryId ?? '未分類'}'),
                   ],
                 ),

@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_providers.dart';
 import '../../../core/presentation/main_app_bar_actions.dart';
+import '../../upload/models/upload_status.dart';
 import '../data/statements_api.dart';
+import '../models/card_issuer.dart';
 import '../models/category_item.dart';
 import '../models/statement_item.dart';
 import 'statement_classification_page.dart';
+import 'upload_status_badge.dart';
 
 class StatementsListPage extends ConsumerStatefulWidget {
   const StatementsListPage({super.key});
@@ -23,12 +26,17 @@ class _StatementsListPageState extends ConsumerState<StatementsListPage> {
   late int _selectedMonth;
   int? _selectedCategoryId;
   String? _selectedCardHolder;
+  String? _selectedCardIssuer;
   bool? _isUnclassified;
 
   bool _isLoading = false;
+  bool _statusLoading = false;
   String? _errorMessage;
+  String? _statusError;
   List<CategoryItem> _categories = <CategoryItem>[];
+  List<CardIssuer> _issuers = <CardIssuer>[];
   List<StatementItem> _statements = <StatementItem>[];
+  UploadStatus? _uploadStatus;
 
   @override
   void initState() {
@@ -46,15 +54,19 @@ class _StatementsListPageState extends ConsumerState<StatementsListPage> {
     });
     try {
       final categories = await _api.fetchCategories();
+      final issuers = await _api.fetchCardIssuers();
       final statements = await _api.fetchStatements(
         year: _selectedYear,
         month: _selectedMonth,
+        cardIssuer: _selectedCardIssuer,
       );
       if (!mounted) return;
       setState(() {
         _categories = categories;
+        _issuers = issuers;
         _statements = statements;
       });
+      await _loadStatus();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -80,12 +92,14 @@ class _StatementsListPageState extends ConsumerState<StatementsListPage> {
         month: _selectedMonth,
         categoryId: _selectedCategoryId,
         cardHolder: _selectedCardHolder,
+        cardIssuer: _selectedCardIssuer,
         isUnclassified: _isUnclassified,
       );
       if (!mounted) return;
       setState(() {
         _statements = statements;
       });
+      await _loadStatus();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -106,8 +120,33 @@ class _StatementsListPageState extends ConsumerState<StatementsListPage> {
     setState(() {
       _selectedYear = next.year;
       _selectedMonth = next.month;
+      _uploadStatus = null;
     });
     await _search();
+  }
+
+  Future<void> _loadStatus() async {
+    final year = _selectedYear;
+    final month = _selectedMonth;
+    setState(() => _statusLoading = true);
+    try {
+      final status = await _api.fetchUploadStatus(year: year, month: month);
+      if (!mounted || year != _selectedYear || month != _selectedMonth) return;
+      setState(() {
+        _uploadStatus = status;
+        _statusError = null;
+      });
+    } catch (e) {
+      if (!mounted || year != _selectedYear || month != _selectedMonth) return;
+      setState(() {
+        _uploadStatus = null;
+        _statusError = '取込状況の取得に失敗しました: $e';
+      });
+    } finally {
+      if (mounted && year == _selectedYear && month == _selectedMonth) {
+        setState(() => _statusLoading = false);
+      }
+    }
   }
 
   Future<void> _openFilterSheet() async {
@@ -117,94 +156,119 @@ class _StatementsListPageState extends ConsumerState<StatementsListPage> {
       builder: (context) {
         int? categoryId = _selectedCategoryId;
         String? cardHolder = _selectedCardHolder;
+        String? cardIssuer = _selectedCardIssuer;
         bool? isUnclassified = _isUnclassified;
         return StatefulBuilder(
           builder: (context, setSheetState) => SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('絞り込み条件', style: TextStyle(fontSize: 16)),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<int?>(
-                    value: categoryId,
-                    decoration: const InputDecoration(labelText: 'カテゴリ'),
-                    items: [
-                      const DropdownMenuItem<int?>(
-                          value: null, child: Text('すべて')),
-                      ..._categories.map(
-                        (c) => DropdownMenuItem<int?>(
-                          value: c.id,
-                          child: Text(c.name),
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('絞り込み条件', style: TextStyle(fontSize: 16)),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<int?>(
+                      value: categoryId,
+                      decoration: const InputDecoration(labelText: 'カテゴリ'),
+                      items: [
+                        const DropdownMenuItem<int?>(
+                            value: null, child: Text('すべて')),
+                        ..._categories.map(
+                          (c) => DropdownMenuItem<int?>(
+                            value: c.id,
+                            child: Text(c.name),
+                          ),
                         ),
-                      ),
-                    ],
-                    onChanged: (value) =>
-                        setSheetState(() => categoryId = value),
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String?>(
-                    value: cardHolder,
-                    decoration: const InputDecoration(labelText: '名義人'),
-                    items: const [
-                      DropdownMenuItem<String?>(
-                          value: null, child: Text('すべて')),
-                      DropdownMenuItem<String?>(value: '夫', child: Text('夫')),
-                      DropdownMenuItem<String?>(value: '妻', child: Text('妻')),
-                      DropdownMenuItem<String?>(value: '共通', child: Text('共通')),
-                    ],
-                    onChanged: (value) =>
-                        setSheetState(() => cardHolder = value),
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<bool?>(
-                    value: isUnclassified,
-                    decoration: const InputDecoration(labelText: '未分類'),
-                    items: const [
-                      DropdownMenuItem<bool?>(value: null, child: Text('すべて')),
-                      DropdownMenuItem<bool?>(
-                          value: true, child: Text('未分類のみ')),
-                      DropdownMenuItem<bool?>(
-                          value: false, child: Text('分類済みのみ')),
-                    ],
-                    onChanged: (value) =>
-                        setSheetState(() => isUnclassified = value),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () {
-                            setSheetState(() {
-                              categoryId = null;
-                              cardHolder = null;
-                              isUnclassified = null;
-                            });
-                          },
-                          child: const Text('リセット'),
+                      ],
+                      onChanged: (value) =>
+                          setSheetState(() => categoryId = value),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String?>(
+                      value: cardHolder,
+                      decoration: const InputDecoration(labelText: '名義人'),
+                      items: const [
+                        DropdownMenuItem<String?>(
+                            value: null, child: Text('すべて')),
+                        DropdownMenuItem<String?>(value: '夫', child: Text('夫')),
+                        DropdownMenuItem<String?>(value: '妻', child: Text('妻')),
+                        DropdownMenuItem<String?>(
+                            value: '共通', child: Text('共通')),
+                      ],
+                      onChanged: (value) =>
+                          setSheetState(() => cardHolder = value),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String?>(
+                      value: cardIssuer,
+                      decoration: const InputDecoration(labelText: 'カード発行会社'),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('すべて'),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                            setState(() {
-                              _selectedCategoryId = categoryId;
-                              _selectedCardHolder = cardHolder;
-                              _isUnclassified = isUnclassified;
-                            });
-                            _search();
-                          },
-                          child: const Text('適用'),
+                        for (final issuer in _issuers)
+                          DropdownMenuItem<String?>(
+                            value: issuer.code,
+                            child: Text(issuer.displayName),
+                          ),
+                      ],
+                      onChanged: (value) =>
+                          setSheetState(() => cardIssuer = value),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<bool?>(
+                      value: isUnclassified,
+                      decoration: const InputDecoration(labelText: '未分類'),
+                      items: const [
+                        DropdownMenuItem<bool?>(
+                            value: null, child: Text('すべて')),
+                        DropdownMenuItem<bool?>(
+                            value: true, child: Text('未分類のみ')),
+                        DropdownMenuItem<bool?>(
+                            value: false, child: Text('分類済みのみ')),
+                      ],
+                      onChanged: (value) =>
+                          setSheetState(() => isUnclassified = value),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () {
+                              setSheetState(() {
+                                categoryId = null;
+                                cardHolder = null;
+                                cardIssuer = null;
+                                isUnclassified = null;
+                              });
+                            },
+                            child: const Text('リセット'),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              setState(() {
+                                _selectedCategoryId = categoryId;
+                                _selectedCardHolder = cardHolder;
+                                _selectedCardIssuer = cardIssuer;
+                                _isUnclassified = isUnclassified;
+                              });
+                              _search();
+                            },
+                            child: const Text('適用'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -217,8 +281,20 @@ class _StatementsListPageState extends ConsumerState<StatementsListPage> {
     var count = 0;
     if (_selectedCategoryId != null) count += 1;
     if (_selectedCardHolder != null) count += 1;
+    if (_selectedCardIssuer != null) count += 1;
     if (_isUnclassified != null) count += 1;
     return count;
+  }
+
+  String _emptyMessage() {
+    if (_activeFilterCount() > 0) {
+      return '条件に該当する明細はありません';
+    }
+    final status = _uploadStatus;
+    if (status == null || status.uploaded.isEmpty) {
+      return '対象年月の明細はまだアップロードされていません';
+    }
+    return '条件に該当する明細はありません';
   }
 
   String _formatYmd(DateTime date) {
@@ -380,7 +456,10 @@ class _StatementsListPageState extends ConsumerState<StatementsListPage> {
                         .toList(),
                     onChanged: (value) async {
                       if (value == null) return;
-                      setState(() => _selectedYear = value);
+                      setState(() {
+                        _selectedYear = value;
+                        _uploadStatus = null;
+                      });
                       await _search();
                     },
                   ),
@@ -404,7 +483,10 @@ class _StatementsListPageState extends ConsumerState<StatementsListPage> {
                         .toList(),
                     onChanged: (value) async {
                       if (value == null) return;
-                      setState(() => _selectedMonth = value);
+                      setState(() {
+                        _selectedMonth = value;
+                        _uploadStatus = null;
+                      });
                       await _search();
                     },
                   ),
@@ -414,6 +496,26 @@ class _StatementsListPageState extends ConsumerState<StatementsListPage> {
                   onPressed: _isLoading ? null : () => _changeMonth(1),
                   icon: const Icon(Icons.chevron_right),
                 ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                UploadStatusBadge(
+                  status: _uploadStatus,
+                  isLoading: _statusLoading,
+                ),
+                if (_statusError != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    _statusError!,
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                ],
               ],
             ),
           ),
@@ -464,9 +566,7 @@ class _StatementsListPageState extends ConsumerState<StatementsListPage> {
                                     ),
                                     const SizedBox(height: 12),
                                     Text(
-                                      _activeFilterCount() > 0
-                                          ? '条件に該当する明細はありません'
-                                          : '$_selectedYear年$_selectedMonth月の明細はまだアップロードされていません',
+                                      _emptyMessage(),
                                       textAlign: TextAlign.center,
                                       style:
                                           Theme.of(context).textTheme.bodyLarge,
@@ -498,6 +598,7 @@ class _StatementsListPageState extends ConsumerState<StatementsListPage> {
                                     [
                                       _formatYmd(item.usedAt),
                                       item.cardHolder ?? '-',
+                                      item.cardIssuerName ?? '-',
                                       _categoryNameFromId(item.categoryId),
                                       _classifiedByLabel(item.classifiedBy),
                                       if (aiConfidenceLabel != null)
