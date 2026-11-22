@@ -3,6 +3,7 @@ backend/.env
 *.db
 __pycache__/
 *.py[cod]
+# 実明細・個人情報。絶対にコミットしない（ローカル検証専用）
 sample/*
 memo/*
 logs/*
