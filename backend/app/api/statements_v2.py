@@ -568,6 +568,7 @@ def get_monthly_trend(
     to_year: int,
     to_month: int,
     category_id: Optional[int] = None,
+    card_issuer: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     from_ym = _yyyymm(from_year, from_month)
@@ -588,6 +589,10 @@ def get_monthly_trend(
         .filter((Statement.year * 100 + Statement.month) >= from_ym)
         .filter((Statement.year * 100 + Statement.month) <= to_ym)
     )
+    if card_issuer:
+        query = query.join(CardIssuer, CardIssuer.id == Statement.card_issuer_id).filter(
+            CardIssuer.code == card_issuer
+        )
     if category_id is not None:
         query = query.filter(StatementItem.category_id == category_id)
 
