@@ -39,6 +39,18 @@ class StatementUploadResponse(BaseModel):
     error_count: int
 
 
+class DetectIssuerCandidate(BaseModel):
+    code: str
+    display_name: str
+
+
+class DetectIssuerResponse(BaseModel):
+    detected_code: Optional[str] = None
+    detected_display_name: Optional[str] = None
+    confidence: Optional[str] = None
+    candidates: List[DetectIssuerCandidate]
+
+
 class StatementSummaryItem(BaseModel):
     category_id: Optional[int] = None
     category_name: str

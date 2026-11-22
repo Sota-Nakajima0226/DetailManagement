@@ -42,6 +42,16 @@ def header_signature_matches(
     return all(str(col).strip() in header_set for col in header_signature)
 
 
+def peek_csv_headers(content: bytes, encoding: str) -> list[str]:
+    """CSV 先頭行のヘッダ列名を返す。デコード失敗時は空リスト。"""
+    try:
+        text = _decode_csv(content, encoding)
+    except CsvImportError:
+        return []
+    reader = csv.DictReader(io.StringIO(text))
+    return [h for h in (reader.fieldnames or []) if h is not None]
+
+
 def _as_mapping(profile: Mapping[str, Any] | Any) -> Mapping[str, Any]:
     if isinstance(profile, Mapping):
         return profile

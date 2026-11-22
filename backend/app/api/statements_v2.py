@@ -18,12 +18,25 @@ from app.core.config import (
     OPENAI_MODEL,
 )
 from app.core.database import get_db
-from app.models import CardIssuer, Category, ClassificationRule, Statement, StatementItem
+from app.models import (
+    CardIssuer,
+    Category,
+    ClassificationRule,
+    CsvImportProfile,
+    Statement,
+    StatementItem,
+)
 from app.services.ai_category_classifier import (
     ShopAiClassification,
     classify_shop_names_openai,
 )
+from app.services.csv_import_engine import (
+    header_signature_matches,
+    peek_csv_headers,
+)
 from app.schemas import (
+    DetectIssuerCandidate,
+    DetectIssuerResponse,
     MonthlyTrendPoint,
     MonthlyTrendSeries,
     StatementByHolderItem,
@@ -80,6 +93,60 @@ def _rakuten_issuer_id(db: Session) -> int:
             detail="card issuer 'rakuten' is not seeded",
         )
     return int(cast(Any, issuer).id)
+
+
+@router.post("/detect-issuer", response_model=DetectIssuerResponse)
+async def detect_issuer(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Invalid file name")
+    if not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV is supported at this moment")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    pairs = (
+        db.query(CardIssuer, CsvImportProfile)
+        .join(CsvImportProfile, CsvImportProfile.card_issuer_id == CardIssuer.id)
+        .filter(CardIssuer.is_active.is_(True))
+        .order_by(CardIssuer.sort_order.asc(), CardIssuer.id.asc())
+        .all()
+    )
+
+    candidates: list[DetectIssuerCandidate] = []
+    for issuer, profile in pairs:
+        encoding = str(cast(Any, profile).encoding or "utf-8")
+        headers = peek_csv_headers(content, encoding)
+        if not headers:
+            continue
+        signature = list(cast(Any, profile).header_signature or [])
+        if header_signature_matches(headers, signature):
+            candidates.append(
+                DetectIssuerCandidate(
+                    code=str(issuer.code),
+                    display_name=str(issuer.display_name),
+                )
+            )
+
+    if len(candidates) == 1:
+        only = candidates[0]
+        return DetectIssuerResponse(
+            detected_code=only.code,
+            detected_display_name=only.display_name,
+            confidence="high",
+            candidates=candidates,
+        )
+
+    return DetectIssuerResponse(
+        detected_code=None,
+        detected_display_name=None,
+        confidence=None,
+        candidates=candidates,
+    )
 
 
 @router.post("/upload", response_model=StatementUploadResponse, status_code=201)
