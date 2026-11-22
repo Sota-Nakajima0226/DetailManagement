@@ -165,9 +165,9 @@ flowchart TD
 
 **完了条件**
 
-- [ ] 同じ月に楽天＋AmexをUIから連続取込し、一覧で両方見える
-- [ ] 未取込バッジが upload-status と一致する
-- [ ] `docs/screens/screen_specification.md` の該当SCRと大きく矛盾しない
+- [x] 同じ月に楽天＋AmexをUIから連続取込し、一覧で両方見える
+- [x] 未取込バッジが upload-status と一致する
+- [x] `docs/screens/screen_specification.md` の該当SCRと大きく矛盾しない
 
 **create-dev-plan:** APIクライアント → Upload → List/Badge → Analytics、など。
 

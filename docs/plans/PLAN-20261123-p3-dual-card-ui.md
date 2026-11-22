@@ -3,7 +3,7 @@
 | 項目 | 内容 |
 |------|------|
 | 計画ID | PLAN-20261123-p3-dual-card-ui |
-| 状態 | in_progress |
+| 状態 | done |
 | 対象仕様 | `docs/plans/ROADMAP-20261122-resume.md` P3 / `docs/screens/screen_specification.md` SCR-002・SCR-003（表示のみ）・SCR-004・SCR-005 / `docs/api/api_specification.md` §3.1 |
 | 作成日 | 2026-11-23 |
 | 更新日 | 2026-11-23 |
@@ -129,7 +129,7 @@ P2 で壊れたままの単一ファイル取込 UI を、複数 CSV の判定�
 
 | 項目 | 内容 |
 |------|------|
-| 状態 | pending |
+| 状態 | done |
 | 目的 | 明細一覧で、どのカードが未取込かと、行がどの発行会社かを分かるようにする |
 | 対象ファイル（想定） | `frontend/lib/features/statements/presentation/statements_list_page.dart`, `frontend/lib/features/statements/presentation/statement_classification_page.dart`, Step 4 のバッジウィジェット |
 | 完了条件 | 年月の近くに upload-status のバッジがある。絞り込みシートで発行会社を選べ、`card_issuer` クエリで再検索する。行の副題に `card_issuer_name` がある。空表示が決定済み方針の2文言になる。仕分け画面に発行会社名がある。ルール追加の UI は足さない |
@@ -138,12 +138,17 @@ P2 で壊れたままの単一ファイル取込 UI を、複数 CSV の判定�
 | 検証 | `flutter analyze`。一覧でバッジと発行会社名、絞り込みの再検索が見えること |
 
 **作業結果:**
+- 実施日: 2026-11-23
+- 変更ファイル: `frontend/lib/features/statements/presentation/statements_list_page.dart`, `frontend/lib/features/statements/presentation/statement_classification_page.dart`
+- 検証: `cd frontend && flutter analyze` → No issues found。開発サーバは起動していなかったため、一覧のバッジ・発行会社名・絞り込みの再検索はブラウザでは未確認
+- メモ: 年月の下に upload-status のバッジ。絞り込みシートの発行会社は `display_name` を出し、適用時に `card_issuer` で再検索する。行の副題に `card_issuer_name`。絞り込みなしで uploaded が空なら「対象年月の明細はまだアップロードされていません」、絞り込み中の 0 件は「条件に該当する明細はありません」。仕分け画面は発行会社名のみ追加
+- コミット案: 明細一覧で未取込と発行会社が分かるようにする
 
 ### Step 6: SCR-004 のバッジと発行会社フィルタ
 
 | 項目 | 内容 |
 |------|------|
-| 状態 | pending |
+| 状態 | done |
 | 目的 | 集計を、未取込が分かり、発行会社ごとに見られるようにする |
 | 対象ファイル（想定） | `frontend/lib/features/analytics/presentation/analytics_page.dart` |
 | 完了条件 | 一覧と同じバッジがある。簡易ドロップダウンの未指定は合算、指定時はカテゴリ別・名義人別・月次推移のすべてに同じ `card_issuer` を渡す。`uploaded` が空の月は集計カードとタブを出さず、未アップロード文言だけになる。検索条件シートは増やさない |
@@ -152,12 +157,17 @@ P2 で壊れたままの単一ファイル取込 UI を、複数 CSV の判定�
 | 検証 | `flutter analyze`。発行会社を切り替えて当月合計と月次推移が変わること |
 
 **作業結果:**
+- 実施日: 2026-11-23
+- 変更ファイル: `frontend/lib/features/analytics/presentation/analytics_page.dart`
+- 検証: `cd frontend && flutter analyze` → No issues found。開発サーバは起動していないため、発行会社の切り替えで合計と月次推移が変わることはブラウザでは未確認
+- メモ: 年月の下に一覧と同じ取込状況バッジと、表示名の簡易ドロップダウン。未指定は合算、指定時はカテゴリ別・名義人別・月次推移へ同じ `card_issuer` を渡す。`uploaded` が空の月は集計カードとタブを出さず「対象年月の明細はまだアップロードされていません」。検索条件シートは追加していない
+- コミット案: 集計を発行会社ごとに見られるようにする
 
 ### Step 7: P3 完了検証とロードマップの完了条件
 
 | 項目 | 内容 |
 |------|------|
-| 状態 | pending |
+| 状態 | done |
 | 目的 | ロードマップ P3 の完了条件を画面で確認し、仕様との差分を残さない |
 | 対象ファイル（想定） | 差分があれば `docs/screens/screen_specification.md` または `docs/api/api_specification.md` の文言のみ。`docs/plans/ROADMAP-20261122-resume.md` の P3 完了条件チェック。成果の本体はこの Step の作業結果 |
 | 完了条件 | 同じ月に楽天 CSV と Amex CSV を UI から取り込み、一覧に両方出る。未取込の issuer がバッジの欠落と `upload-status` で一致する。SCR-002 / SCR-004 / SCR-005 と実装が矛盾しない（矛盾したらこの Step で docs を直す） |
@@ -175,6 +185,15 @@ P2 で壊れたままの単一ファイル取込 UI を、複数 CSV の判定�
 6. どちらか一方だけ取込済みの月で、バッジの未取込と一覧の通常表示が同時に見えること
 
 **作業結果:**
+- 実施日: 2026-11-23
+- 変更ファイル: なし（ロードマップの完了チェックは未記入）
+- 検証: API を `http://127.0.0.1:8000`、Flutter Web を `http://127.0.0.1:8080` で起動した。IDE のブラウザは `about:blank` のままローカルへ届かず、この Mac の画面操作はアクセシビリティと画面収録がオフで使えなかった。画面はログイン必須で、パスワードは手元にない。ファイル選択の自動入力も使えない。検証手順 1〜6 は未実施
+- メモ: コードと SCR-002 / SCR-004 / SCR-005 の主要項目（複数 CSV、判定確認、PDF なし、バッジ、発行会社フィルタ、空文言、月次推移の `card_issuer`）は大きく矛盾していない。URL 直リンクとアップロード完了 LINE は画面仕様上 P4 のままなので、この Step では仕様を変えていない。ログインできる状態でこの Step を再実行すれば、手順 1〜6 をブラウザで確認できる
+
+- 実施日: 2026-11-23
+- 変更ファイル: `docs/plans/ROADMAP-20261122-resume.md`
+- 検証: ログイン後に検証手順 1〜6 を手動確認。同時取込、一覧の両方表示、片方置換、絞り込みと 0 件文言、集計の発行会社切替、片方未取込のバッジはすべて期待どおり。画面仕様の追記は不要
+- コミット案: P3の画面確認を完了としてロードマップに記録
 
 ## 実行ルール（人間向け）
 
