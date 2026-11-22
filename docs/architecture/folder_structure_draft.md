@@ -47,7 +47,8 @@ DetailManagement/
 │   └── architecture/            # システム構成/構造方針
 │
 ├── scripts/                     # 補助スクリプト(データ投入、ローカル検証など)
-├── infra/                       # デプロイ・環境設定(将来)
+├── memo/                        # 運用メモ・バックログ・インフラ比較など
+├── infra/                       # デプロイ・環境設定(将来。本番は現状 Render+Supabase)
 ├── .env.example                 # 環境変数テンプレート
 └── README.md                    # 起動方法と全体ガイド
 ```

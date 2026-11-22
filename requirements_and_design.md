@@ -1,8 +1,11 @@
 # 家族家計管理アプリ 要件定義書・設計書
 
-**Version:** 0.2  
+**Version:** 0.3  
 **作成日:** 2026年3月  
-**ステータス:** 叩き台
+**更新:** 2026年11月（2カード対応・手動CSV運用・インフラ方針）  
+**ステータス:** 仕様見直し反映  
+
+> 分割された正本は `docs/` 配下。インフラコスト比較は `memo/infra_cost_comparison.md`。
 
 ---
 
@@ -35,16 +38,19 @@
 | 主要プラットフォーム | PWA（Progressive Web App）— PC・スマホ両対応 |
 | 開発目的 | 自己研鑽・家族の家計管理改善 |
 | 公開範囲 | 家族内のみ（Web公開なし） |
+| 支払手段 | 楽天カードおよび American Express（Amex）の2系統 |
 | 将来拡張 | スケジュール共有など家族向け機能全般 |
 
 ---
 
 ## 2. 背景と課題
 
-- 楽天家族カードの明細閲覧権限は**本会員（夫）のみ**に限られている
-- 家計管理は**妻が担当**しているが、明細確認のたびに夫経由でPDF/CSVを受け取る必要がある
+- 家計のカード支払いは **楽天カード** と **Amex** の2種類で行われている
+- 楽天家族カードの明細閲覧権限は**本会員（夫）のみ**に限られている（Amex も原本取得はログイン会員側）
+- 家計管理は**妻が担当**しているが、明細確認のたびに夫経由でCSVを受け取る必要がある
 - この手動共有フローが手間であり、タイムリーな家計把握が難しい
 - 明細の仕分け（カテゴリ分類）も毎月手作業で行っており、自動化したい
+- カード会社の個人向け明細APIは無いため、完全自動取込は非現実的。手動CSVを主経路とし、一括UP・リマインド・未完了表示で運用負荷を下げる
 
 ---
 
@@ -54,23 +60,35 @@
 
 | 機能 | 詳細 | 優先度 |
 |------|------|--------|
-| 手動アップロード | CSV または PDF 形式の明細ファイルをアップロード | 高 |
-| ファイル形式対応 | 楽天カードのCSV・PDF両形式に対応 | 高 |
+| 手動アップロード | issuer（カード発行会社）ごとの CSV 明細をアップロード | 高 |
+| プロファイル駆動変換 | DBの取込プロファイル＋汎用エンジンで共通モデルへ変換（会社専用パーサは作らない） | 高 |
+| 初期シード | 楽天・Amex の issuer / プロファイル。PDFは低優先（将来） | 高 |
+| 複数ファイル一括取込 | 複数CSVを一度に選択して取込 | 高 |
+| 発行会社の自動判定 | ヘッダ指紋等で自動判定し、**画面で確認してから**取込 | 高 |
+| 取込プロファイル管理API | CRUD（カード追加＝マッピング追加）。当面はAPI/SQLでメンテ | 高 |
+| 取込プロファイル管理画面 | 上記UI（**低優先**） | 低 |
 | アップロード完了通知 | 完了時に妻へLINE通知を送信 | 高 |
-| 明細確定リマインド | 毎月6日頃に「明細が確定しました」とLINE通知 | 中 |
-| 自動アップロード | スクレイピングによる自動取得（**利用規約リスクのため非採用**） | — |
+| 明細取込リマインド | 設定日に夫へLINE通知。未取込 issuer がある場合は再通知 | 高 |
+| アプリ内未完了表示 | 対象月の issuer ごとの取込済み／未取込を表示 | 高 |
+| カレンダー補助 | 毎月リマインド用 `.ics`（任意） | 低 |
+| 自動アップロード | 個人向け公式APIなし／スクレイピングは非採用 | — |
 
+> **用語**  
+> **issuer**: 明細の出所となるカード会社（例: `rakuten` / `amex`）。  
+> **custom_hook**: 列マッピング等の設定だけでは表現できない特殊CSV向けの任意逃げ道。通常は未使用（低優先）。
+>
 > **自動アップロードについて**  
-> 楽天カードサイトへの自動ログイン・スクレイピングは利用規約違反のリスクがあるため採用しない。  
-> 代替として毎月の明細確定タイミング（翌月5〜6日頃）にLINEリマインド通知を送り、手動アップロードを促す。
+> 楽天・日本Amexとも個人が使える公式明細API／OAuthは現状ない。スクレイピングは規約・Bot対策リスクのため非採用。  
+> 代替として (1) LINEリマインド（未取込 issuer のみ）(2) アプリ内未完了バッジ (3) 任意の `.ics` で手動CSV取込を促す。  
+> 同一 `year`/`month`/issuer の再UPは当該発行会社分を置換する。
 
 ### 3.2 明細閲覧機能
 
 | 機能 | 詳細 | 優先度 |
 |------|------|--------|
-| 明細一覧表示 | 日付・利用店名・金額・名義人（夫/妻）・分類元・AI信頼度を一覧表示 | 高 |
+| 明細一覧表示 | 日付・利用店名・金額・名義人・カード発行会社・分類元・AI信頼度を一覧表示 | 高 |
 | 月次切り替え | 月を選択して過去の明細を参照 | 高 |
-| フィルター | カテゴリ・名義人・未分類でフィルタリング | 中 |
+| フィルター | カテゴリ・名義人・カード発行会社・未分類でフィルタリング | 中 |
 | 月次集計サマリー | カテゴリ別・名義人別の合計金額をグラフで可視化 | 中 |
 | 前月比表示 | カテゴリごとに先月との差分を表示 | 低 |
 
@@ -80,7 +98,7 @@
 |------|------|--------|
 | カテゴリマスター管理 | 食費・光熱費・交通費・日用品等のCRUD操作 | 高 |
 | ルールベース自動分類 | 利用店名の文字列パターンでカテゴリを自動判定 | 高 |
-| AI自動分類 | ルール未適用の支払いをClaude APIで分類 | 高 |
+| AI自動分類 | ルール未適用の支払いを OpenAI API で分類 | 高 |
 | 手動上書き | AI・ルール分類の結果を手動修正。未分類行と低信頼度AI分類行を色分けし、編集が必要な明細を見つけやすくする | 高 |
 | 分類ルール管理 | ルール（店名パターン→カテゴリ）のCRUD操作 | 高 |
 | ルール自動追加提案 | 手動修正時に「このルールを追加しますか？」を提案 | 中 |
@@ -98,7 +116,7 @@
 | 機能 | 詳細 | 優先度 |
 |------|------|--------|
 | アップロード完了通知 | 夫がアップした際に妻へLINE通知 | 高 |
-| 明細確定リマインド | 毎月6日頃に夫へアップロードを促すLINE通知 | 中 |
+| 明細取込リマインド | 毎月設定日に夫へ促す。未取込カードがある場合のみ再通知可 | 高 |
 | 予算超過アラート | 設定予算の上限を超えたカテゴリを通知（将来） | 低 |
 
 ### 3.6 認証機能
@@ -125,7 +143,7 @@
 | 認証 | Supabase Auth によるメール認証。URLを知っていてもログインなしではアクセス不可 |
 | 可用性 | 家族内利用のため24時間稼働は必須でない。Renderのスリープ（15分無操作）は許容 |
 | 拡張性 | 将来の機能追加に備え、バックエンドはFeatureごとにモジュール分割する設計 |
-| コスト | 初期は無料枠（Supabase・Render・LINE Notify）で運用。Claude APIは従量課金で月数百円程度を想定 |
+| コスト | 無料枠〜低コスト優先（詳細は `memo/infra_cost_comparison.md`）。AIは従量課金 |
 | バックアップ | Supabase が自動バックアップを提供（無料プランは7日間保持） |
 | 対応デバイス | PC（Chrome/Safari）・iPhone・Android。PWAとしてホーム画面に追加可能 |
 
@@ -138,16 +156,18 @@
 | フロントエンド | Flutter（Dart）— Web ビルド | iOS/Android/Web を1コードでカバー。将来のネイティブ化も容易 |
 | 状態管理 | Riverpod | Flutter推奨・テストしやすい |
 | HTTPクライアント | Dio | インターセプター・エラーハンドリングが充実 |
-| バックエンド | Python 3.11 + FastAPI | CSV/PDFパース・AI連携が得意。チュートリアルから入りやすい |
+| バックエンド | Python 3.11 + FastAPI | CSVパース・AI連携が得意。チュートリアルから入りやすい |
 | ORM | SQLAlchemy | FastAPIとの相性が良い |
-| データベース | PostgreSQL（Supabase） | 無料枠・GUIで管理しやすい |
+| データベース | PostgreSQL（Supabase） | 無料枠・GUIで管理しやすい。**本番はコスト優先で維持** |
 | ファイルストレージ | Supabase Storage | DBと同サービスで管理が簡単 |
 | 認証 | Supabase Auth | Flutter SDKとの連携が数十行で実装可能。無料 |
-| AI分類 | Claude API（Anthropic） | 日本語店名の分類精度が高い |
-| 通知 | LINE Notify | 無料・実装が数行・iOSバージョン制限なし |
+| AI分類 | OpenAI API | 実装済み経路。店名からのカテゴリ推定 |
+| 通知 | LINE Messaging API | 家族運用で導入しやすい |
 | ホスティング（API） | Render | GitHub連携で自動デプロイ・無料枠あり |
 | ホスティング（Web） | Render（Static Site） | Flutter Webのビルド成果物を配信 |
 | CI/CD | GitHub → Render 自動デプロイ | pushするだけで本番反映 |
+
+> AWS への載せ替えは必須としない（学習用は別枠）。比較は `memo/infra_cost_comparison.md`。
 
 ---
 
@@ -193,15 +213,15 @@
 ### データフロー（明細アップロード時）
 
 ```
-1. 夫がPCブラウザ or スマホからCSV/PDFをアップロード
-2. FastAPI がファイルを受け取り Supabase Storage に保存
-3. CSV/PDFパーサーが各行を解析（日付・店名・金額・名義人）
+1. 夫がPCブラウザ or スマホから楽天/Amex の CSV（複数可）をアップロード
+2. FastAPI がファイルを受け取り、発行会社を判定し Supabase Storage に保存
+3. 発行会社別 CSV パーサーが各行を解析（日付・店名・金額・名義人）
 4. 分類ロジックを実行
    a. ルールテーブルと照合 → マッチしたらカテゴリ確定
-   b. マッチしなければ Claude API に店名を渡してカテゴリ推定
+   b. マッチしなければ OpenAI API に店名を渡してカテゴリ推定
    c. AI確信度が低い場合は `category_id = NULL` のまま保存（UI上「未分類」として表示）
-5. statement_items テーブルに保存
-6. LINE Notify で妻に「明細がアップされました」と通知
+5. statement_items テーブルに保存（`year`/`month`/issuer 単位）
+6. LINE で妻に「明細がアップされました」と通知
 ```
 
 ---
@@ -249,9 +269,12 @@ Supabase Auth が管理。アプリ側では role のみ参照。
 | month | INT | 対象月 |
 | file_url | TEXT | Supabase Storage の URL |
 | uploaded_at | TIMESTAMPTZ | |
-| UNIQUE | (year, month) | 同月の二重登録防止 |
+| card_issuer_id | INT FK | `card_issuers.id` |
+| UNIQUE | (year, month, card_issuer_id) | 同年月・同一 issuer の二重登録防止 |
 
-#### statement_items（明細行データ）
+> 別途 `card_issuers`（code / display_name 等）と `csv_import_profiles`（列マッピング JSON 等）を持つ。詳細は `docs/db/db_design.md`。
+
+#### statement_items（明細行データ＝共通モデル）
 
 | カラム | 型 | 説明 |
 |--------|----|------|
@@ -265,8 +288,10 @@ Supabase Auth が管理。アプリ側では role のみ参照。
 | classified_by | TEXT | `rule` / `ai` / `manual` |
 | ai_confidence | DOUBLE PRECISION | AI確信度 0.0〜1.0 |
 | ai_raw_response | TEXT | AIの生レスポンス（デバッグ用） |
-| source | TEXT | `csv` / `pdf` / `manual` / `fixed` |
+| source | TEXT | `csv` / `manual` / `fixed`（PDFは将来） |
 | created_at | TIMESTAMPTZ | |
+
+> issuer は `statements.card_issuer_id` 経由。一覧では `card_issuers` を JOIN して code / 表示名を露出する。
 
 #### fixed_expenses（固定費マスター）
 
@@ -309,7 +334,7 @@ CREATE VIEW monthly_expenses AS
     si.used_at, si.shop_name, si.amount,
     si.card_holder, si.category_id,
     si.classified_by, si.source,
-    s.year, s.month
+    s.year, s.month, s.card_issuer
   FROM statement_items si
   JOIN statements s ON s.id = si.statement_id
 
@@ -319,7 +344,7 @@ CREATE VIEW monthly_expenses AS
     me.used_at, me.shop_name, me.amount,
     me.card_holder, me.category_id,
     'manual' AS classified_by, 'manual' AS source,
-    me.year, me.month
+    me.year, me.month, NULL AS card_issuer
   FROM manual_expenses me;
 ```
 
@@ -346,12 +371,13 @@ CREATE TABLE classification_rules (
 );
 
 CREATE TABLE statements (
-  id          SERIAL PRIMARY KEY,
-  year        INT NOT NULL,
-  month       INT NOT NULL,
-  file_url    TEXT,
-  uploaded_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(year, month)
+  id              SERIAL PRIMARY KEY,
+  year            INT NOT NULL,
+  month           INT NOT NULL,
+  card_issuer_id  INT NOT NULL REFERENCES card_issuers(id),
+  file_url        TEXT,
+  uploaded_at     TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(year, month, card_issuer_id)
 );
 
 CREATE TABLE statement_items (
@@ -425,10 +451,13 @@ INSERT INTO categories (name, color, sort_order) VALUES
 
 | メソッド | パス | 説明 |
 |----------|------|------|
-| POST | `/statements/upload` | CSVまたはPDFをアップロード・パース・分類 |
-| GET | `/statements` | 明細一覧取得（year・month・category・card_holderでフィルタ、AI信頼度と要確認フラグを含む） |
+| POST | `/statements/detect-issuer` | CSVからissuer推定（確認用） |
+| POST | `/statements/upload` | CSV（複数可）をプロファイル駆動で変換・分類（issuer 単位で置換） |
+| GET | `/statements` | 明細一覧取得（year・month・category・card_holder・card_issuer 等でフィルタ） |
+| GET | `/statements/upload-status` | 対象月の issuer ごとの取込状況 |
 | PATCH | `/statements/items/{id}` | カテゴリ手動変更 |
-| GET | `/statements/summary` | 月次集計・カテゴリ別合計 |
+| GET | `/statements/summary` | 月次集計・カテゴリ別合計（任意で card_issuer） |
+| CRUD | `/card-issuers`, `/csv-import-profiles` | issuer / 取込プロファイル管理（画面は低優先） |
 
 #### カテゴリ
 
@@ -571,35 +600,26 @@ async def get_current_user(token = Depends(security)):
 
 ## 11. 通知設計
 
-### LINE Notify による通知
+### LINE Messaging API による通知
 
-プッシュ通知の代替としてLINE Notifyを採用。iOSバージョン制限がなく、実装コストが最小。
-
-```python
-import httpx
-
-async def send_line_notify(message: str, token: str):
-    await httpx.post(
-        "https://notify-api.line.me/api/notify",
-        headers={"Authorization": f"Bearer {token}"},
-        data={"message": message}
-    )
-```
+プッシュ通知の代替として LINE Messaging API を採用する（トークン運用は未決事項）。
 
 ### 通知タイミング
 
 | トリガー | 通知先 | メッセージ例 |
 |----------|--------|-------------|
-| 明細アップロード完了 | 妻 | `📋 3月の明細がアップロードされました。確認してください。` |
-| 毎月6日 定期実行 | 夫 | `💳 楽天カードの明細が確定しました。アップロードをお願いします。` |
-| 未分類が残っている | 妻 | `⚠️ 未分類の支払いが3件あります。仕分けをお願いします。` |
+| 明細アップロード完了 | 妻 | `3月の明細がアップロードされました（楽天/Amex）。確認してください。` |
+| 毎月設定日の定期実行 | 夫 | `未取込のカードがあります（例: Amex）。CSVのアップロードをお願いします。` |
+| 再通知日（未取込が残る場合のみ） | 夫 | `まだ未取込のカードがあります。アップロードをお願いします。` |
+| 未分類が残っている | 妻 | `未分類の支払いが3件あります。仕分けをお願いします。` |
 
 ### 定期通知の実装
 
 Renderの無料プランにはCron機能がないため、外部サービスを利用する。
 
-- **cron-job.org**（無料）: 毎月6日に FastAPI の `/notify/remind` エンドポイントを叩く
+- **cron-job.org**（無料）: 設定日／再通知日に FastAPI の `/notify/remind` を叩く（未取込 issuer がある場合のみ送信）
 - または GitHub Actions の `schedule` トリガーを使う
+- 補助: `/notify/remind.ics` で端末カレンダーへ毎月リマインドを登録可能
 
 ---
 
@@ -610,10 +630,10 @@ Renderの無料プランにはCron機能がないため、外部サービスを�
 | 画面名 | 説明 |
 |--------|------|
 | ログイン画面 | メール＋パスワード認証 |
-| 明細一覧画面 | 月選択・フィルター・支払い一覧 |
+| 明細一覧画面 | 月選択・カード種別含むフィルター・取込状況・支払い一覧 |
 | 明細仕分け画面 | カテゴリ選択・ルール追加提案 |
-| グラフ・集計画面 | カテゴリ別円グラフ・月次推移棒グラフ |
-| アップロード画面 | CSV/PDFファイル選択・アップロード |
+| グラフ・集計画面 | カテゴリ別円グラフ・月次推移棒グラフ（カード種別フィルタ可） |
+| アップロード画面 | 楽天/Amex CSV の複数一括アップロード |
 | カテゴリ管理画面 | カテゴリのCRUD |
 | 分類ルール管理画面 | ルールのCRUD |
 | 固定費管理画面 | 固定費マスターのCRUD |
@@ -709,8 +729,8 @@ Publish Directory: build/web
 |----------|------|-----------|
 | Phase 1：インフラ基盤 | Supabase DB作成・Render環境構築・FastAPI骨格・Flutter雛形 | `Hello World` APIがFlutterから呼べる状態 |
 | Phase 2：認証 | Supabase Auth連携・ログイン画面・ルーティング | ログインしないと使えない状態 |
-| Phase 3：コア機能 | CSV/PDFパース・明細一覧表示・カテゴリCRUD・ルールベース分類 | 明細をアップして一覧表示・手動仕分けができる状態 |
-| Phase 4：AI分類・通知 | Claude API連携・LINE通知実装 | 自動分類と通知が動く状態 |
+| Phase 3：コア機能 | 楽天/Amex CSVパース・明細一覧・カテゴリCRUD・ルールベース分類 | 両カードをアップして一覧・手動仕分けができる状態 |
+| Phase 4：AI分類・通知 | OpenAI連携・LINE通知・未取込リマインド | 自動分類と通知・リマインドが動く状態 |
 | Phase 5：可視化・固定費 | グラフ表示・前月比・固定費管理・手動支払い登録 | 妻が日常的に使えるレベル |
 | Phase 6：将来機能 | スケジュール共有・予算アラート・ネイティブアプリ化（検討） | 家族アプリとして拡張 |
 
@@ -718,8 +738,9 @@ Publish Directory: build/web
 
 ## 15. 未決事項
 
-- [ ] 明細確定リマインドの正確な日付（楽天カードの締め日・確定日を要確認）
-- [ ] LINE Notify の個人トークン vs グループトークンの選択
+- [ ] 明細取込リマインドの日付・再通知間隔（各カードの締め／確定タイミングを要確認）
+- [ ] LINE Messaging API の送信先（個人トーク／グループ）とトークン運用
+- [ ] Amex CSV 実データの列名・文字コード・確定前行の扱い
 - [ ] AI分類の確信度しきい値（0.7は仮設定。実際に使いながら調整）
 - [ ] Renderのスリープが許容できなくなった場合の有料プラン移行タイミング
 - [ ] 楽天カードCSVのカラム名・フォーマット確認（実際にダウンロードして検証が必要）
