@@ -138,11 +138,11 @@ flowchart TD
 
 **完了条件**
 
-- [ ] 楽天CSVをプロファイル経由で取込できる（ハードコード列依存をやめている）
-- [ ] （サンプルがあれば）Amexも同じエンジンで取込できる
-- [ ] detect → 確認用コード指定 → upload のAPI一連が通る
-- [ ] upload-status が `include_in_reminder` 対象の missing を返す
-- [ ] API仕様書の該当節と実装が一致（または docs を実装に合わせて即時整合）
+- [x] 楽天CSVをプロファイル経由で取込できる（ハードコード列依存をやめている）
+- [x] （サンプルがあれば）Amexも同じエンジンで取込できる
+- [x] detect → 確認用コード指定 → upload のAPI一連が通る
+- [x] upload-status が `include_in_reminder` 対象の missing を返す
+- [x] API仕様書の該当節と実装が一致（または docs を実装に合わせて即時整合）
 
 **create-dev-plan:** エンジン＋テスト → detect → upload書き換え → status/list → issuer CRUD、など。
 

@@ -358,15 +358,20 @@
 
 | メソッド | パス | 説明 |
 |----------|------|------|
-| GET | `/card-issuers` | 発行会社一覧 |
+| GET | `/card-issuers` | 発行会社一覧（無効含む。並びは `sort_order`, `id`） |
 | POST | `/card-issuers` | 発行会社作成 |
 | PUT | `/card-issuers/{id}` | 発行会社更新 |
-| DELETE | `/card-issuers/{id}` | 無効化（論理削除想定） |
+| DELETE | `/card-issuers/{id}` | 無効化（`is_active=false` の論理削除。レスポンスは更新後の issuer） |
 | GET | `/csv-import-profiles` | 取込プロファイル一覧 |
 | GET | `/csv-import-profiles/{id}` | 取込プロファイル取得 |
 | POST | `/csv-import-profiles` | 取込プロファイル作成 |
 | PUT | `/csv-import-profiles/{id}` | 取込プロファイル更新 |
-| DELETE | `/csv-import-profiles/{id}` | 削除 |
+| DELETE | `/csv-import-profiles/{id}` | 物理削除（**204**、ボディなし） |
+
+補足:
+
+- `detect-issuer` / `upload` / `upload-status` は **`is_active=true`** の issuer（および紐づくプロファイル）のみ対象。`upload-status` の expected はさらに `include_in_reminder=true`。
+- `card_issuers.code` および `csv_import_profiles.card_issuer_id` は UNIQUE。重複時は **400**。
 
 ### POST `/card-issuers`
 
