@@ -3,7 +3,6 @@ import 'package:dio/dio.dart';
 import '../../upload/models/detect_issuer_result.dart';
 import '../../upload/models/statement_upload_batch_result.dart';
 import '../../upload/models/upload_file_payload.dart';
-import '../../upload/models/upload_result.dart';
 import '../../upload/models/upload_status.dart';
 import '../models/card_issuer.dart';
 import '../models/category_item.dart';
@@ -76,36 +75,6 @@ class StatementsApi {
       throw Exception('カテゴリ更新レスポンスが空です');
     }
     return StatementItem.fromJson(data);
-  }
-
-  Future<bool> hasStatementsInMonth({
-    required int year,
-    required int month,
-  }) async {
-    final items = await fetchStatements(year: year, month: month);
-    return items.isNotEmpty;
-  }
-
-  Future<UploadResult> uploadStatement({
-    required String fileName,
-    required List<int> fileBytes,
-    required int year,
-    required int month,
-  }) async {
-    final formData = FormData.fromMap({
-      'file': MultipartFile.fromBytes(fileBytes, filename: fileName),
-      'year': year.toString(),
-      'month': month.toString(),
-    });
-    final response = await _dio.post<Map<String, dynamic>>(
-      '/statements/upload',
-      data: formData,
-    );
-    final data = response.data;
-    if (data == null) {
-      throw Exception('アップロード結果が空です');
-    }
-    return UploadResult.fromJson(data);
   }
 
   Future<DetectIssuerResult> detectIssuer({
