@@ -1,0 +1,57 @@
+[
+  {
+    "card_issuer_code": "rakuten",
+    "encoding": "utf-8-sig",
+    "header_signature": [
+      "利用日",
+      "利用店名・商品名",
+      "利用者",
+      "利用金額"
+    ],
+    "column_mapping": {
+      "used_at": "利用日",
+      "shop_name": "利用店名・商品名",
+      "amount": "利用金額",
+      "card_holder": "利用者"
+    },
+    "transforms": {
+      "date_format": "%Y/%m/%d",
+      "card_holder_map": {
+        "本人": "夫",
+        "家族": "妻"
+      }
+    },
+    "skip_rules": [],
+    "custom_hook": null
+  },
+  {
+    "card_issuer_code": "amex",
+    "encoding": "cp932",
+    "header_signature": [
+      "ご利用日",
+      "データ処理日",
+      "ご利用内容",
+      "カード会員様名",
+      "会員番号 #",
+      "金額",
+      "海外通貨利用金額",
+      "換算レート"
+    ],
+    "column_mapping": {
+      "used_at": "ご利用日",
+      "shop_name": "ご利用内容",
+      "amount": "金額",
+      "card_holder": "カード会員様名"
+    },
+    "transforms": {
+      "date_format": "%Y/%m/%d",
+      "amount_remove_chars": [",", "¥"],
+      "card_holder_map": {
+        "SOTA NAKAJIMA": "夫",
+        "SEIRA NAKAJIMA": "妻"
+      }
+    },
+    "skip_rules": [],
+    "custom_hook": null
+  }
+]

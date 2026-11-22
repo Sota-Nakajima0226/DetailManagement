@@ -1,0 +1,18 @@
+[
+  {
+    "code": "rakuten",
+    "display_name": "楽天",
+    "is_active": true,
+    "include_in_reminder": true,
+    "remind_day_of_month": 23,
+    "sort_order": 1
+  },
+  {
+    "code": "amex",
+    "display_name": "Amex",
+    "is_active": true,
+    "include_in_reminder": true,
+    "remind_day_of_month": 4,
+    "sort_order": 2
+  }
+]

@@ -1,5 +1,6 @@
 import json
 import sys
+from datetime import date
 from pathlib import Path
 
 from sqlalchemy import MetaData, Table, create_engine, select
@@ -11,7 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.core.config import DATABASE_URL
+from app.core.config import DATABASE_URL, normalize_database_url
 
 
 MASTER_DATA_DIR = PROJECT_ROOT / "master_data"
@@ -55,6 +56,11 @@ def resolve_category_ids(session: Session, categories_table: Table) -> dict[str,
     return {name: category_id for category_id, name in rows}
 
 
+def resolve_issuer_ids(session: Session, issuers_table: Table) -> dict[str, int]:
+    rows = session.execute(select(issuers_table.c.id, issuers_table.c.code)).all()
+    return {code: issuer_id for issuer_id, code in rows}
+
+
 def require_tables(engine: Engine, required_tables: list[str]) -> None:
     metadata = MetaData()
     metadata.reflect(bind=engine)
@@ -72,8 +78,15 @@ def main() -> None:
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL is not configured.")
 
-    engine = create_engine(DATABASE_URL)
-    required_tables = ["users", "categories", "classification_rules", "fixed_expenses"]
+    engine = create_engine(normalize_database_url(DATABASE_URL))
+    required_tables = [
+        "users",
+        "categories",
+        "classification_rules",
+        "fixed_expenses",
+        "card_issuers",
+        "csv_import_profiles",
+    ]
     require_tables(engine, required_tables)
 
     metadata = MetaData()
@@ -81,11 +94,15 @@ def main() -> None:
     categories_table = Table("categories", metadata, autoload_with=engine)
     rules_table = Table("classification_rules", metadata, autoload_with=engine)
     fixed_expenses_table = Table("fixed_expenses", metadata, autoload_with=engine)
+    issuers_table = Table("card_issuers", metadata, autoload_with=engine)
+    profiles_table = Table("csv_import_profiles", metadata, autoload_with=engine)
 
     users = load_json("users.json")
     categories = load_json("categories.json")
     rules = load_json("classification_rules.json")
     fixed_expenses = load_json("fixed_expenses.json")
+    issuers = load_json("card_issuers.json")
+    profiles = load_json("csv_import_profiles.json")
 
     with Session(engine) as session:
         with session.begin():
@@ -115,12 +132,32 @@ def main() -> None:
                 payload = dict(fixed_expense)
                 payload["category_id"] = category_map[category_name]
                 payload.pop("category_name", None)
+                for date_key in ("valid_from", "valid_until"):
+                    raw = payload.get(date_key)
+                    if isinstance(raw, str) and raw:
+                        payload[date_key] = date.fromisoformat(raw)
                 upsert_by_keys(
                     session,
                     fixed_expenses_table,
                     ["name", "billing_day", "card_holder", "valid_from"],
                     payload,
                 )
+
+            for issuer in issuers:
+                upsert_by_keys(session, issuers_table, ["code"], issuer)
+
+            issuer_map = resolve_issuer_ids(session, issuers_table)
+
+            for profile in profiles:
+                issuer_code = profile["card_issuer_code"]
+                if issuer_code not in issuer_map:
+                    raise ValueError(
+                        f"csv_import_profiles: unknown card_issuer_code '{issuer_code}'"
+                    )
+                payload = dict(profile)
+                payload["card_issuer_id"] = issuer_map[issuer_code]
+                payload.pop("card_issuer_code", None)
+                upsert_by_keys(session, profiles_table, ["card_issuer_id"], payload)
 
     print("Master data seeded successfully.")
 
