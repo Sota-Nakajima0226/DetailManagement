@@ -109,18 +109,21 @@
 
 - 概要: 明細ファイルを保存し、取込プロファイルで共通モデルへ変換して分類・保存する。複数 CSV 可。
 - リクエスト: `multipart/form-data`
-  - `files`: CSV（1件以上）
+  - `files`: CSV（**1件以上**。フィールド名は繰り返し `files`）
   - `year` / `month`: 対象年月（全ファイル共通）
-  - ファイルごとの `card_issuer_code`（推奨）: 画面で確認・修正した issuer コード。未指定時はサーバ側で再判定するが、確認済みコードの送付を正とする
+  - `card_issuer_codes`（推奨）: issuer コード（`rakuten` / `amex` 等）の繰り返しフィールド。**`files` と同じ順序・同じ件数**で送る。画面で確認・修正した code の送付を正とする
+  - `card_issuer_codes` を省略した場合のみ、サーバが各ファイルについて `detect-issuer` 相当の再判定を行う（曖昧・不能なら当該ファイルはエラー）
+  - `files` と `card_issuer_codes` の件数が食い違う場合は **400**
+- **互換性（破壊的変更）**: 旧形式の単一フィールド `file`、および単一オブジェクト応答（トップレベルに `statement_id` 等）は **サポートしない**。クライアントは本節の `files` / `card_issuer_codes` / `results[]` に合わせる（フロント追従は P3）
 - 変換: DB の `csv_import_profiles` を読む **汎用エンジン** のみ。会社専用パーサは置かない。PDF は対象外（将来）
-- 再アップロード: 同一 `year` / `month` / issuer が既にある場合は当該 statement（および items）を **置換**
+- 再アップロード: 同一 `year` / `month` / issuer が既にある場合は当該 statement（および items）を **置換**（他 issuer の行は触らない）
 - 主な処理（ファイルごと）:
   1. Supabase Storageへ原本保存（未実装の場合あり）
   2. 指定/判定した issuer のプロファイルで共通モデルへ変換
   3. ルール分類 → ルール未ヒット分を OpenAI で分類（`OPENAI_API_KEY` 設定時のみ）
   4. `statement_items` に保存
   5. 全ファイル処理後、妻へ通知送信（未実装の場合あり）
-- レスポンス例:
+- レスポンス: 常に `results` 配列（ファイル順）。単一ファイルでも配列1件。
 
 ```json
 {
@@ -421,16 +424,17 @@
 ## 5. CSV取込（プロファイル駆動）
 
 ```text
-CSVファイル
-  → header_signature で issuer 候補を判定
-  → ユーザー確認後の card_issuer_code
+CSVファイル（複数可）
+  → header_signature で issuer 候補を判定（detect-issuer）
+  → ユーザー確認後、files と同じ順の card_issuer_codes を upload に添付
   → csv_import_profiles を読む汎用エンジン
   → 共通モデル（used_at, shop_name, amount, card_holder, ...）
-  → 分類 → statement_items
+  → 分類 → statement_items（results[] でファイルごと返す）
 ```
 
 - 会社専用パーサは追加しない。カード追加時は `card_issuers` + `csv_import_profiles` を追加する。
 - `custom_hook` は通常 NULL。設定で表現できない場合の任意・低優先の逃げ道であり、初期実装では未使用でよい。
+- detect の照合（当面）: プロファイルの `header_signature` 全要素が CSV ヘッダに含まれる（順序不問）。一意一致なら `detected_code` に採用、複数一致・不一致は `null` と候補。
 
 ## 6. 通知系API（予定）
 
