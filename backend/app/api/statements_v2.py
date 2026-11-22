@@ -18,7 +18,7 @@ from app.core.config import (
     OPENAI_MODEL,
 )
 from app.core.database import get_db
-from app.models import Category, ClassificationRule, Statement, StatementItem
+from app.models import CardIssuer, Category, ClassificationRule, Statement, StatementItem
 from app.services.ai_category_classifier import (
     ShopAiClassification,
     classify_shop_names_openai,
@@ -71,6 +71,17 @@ def _classify_by_rules(shop_name: str, rules: list[ClassificationRule]) -> Optio
     return None
 
 
+def _rakuten_issuer_id(db: Session) -> int:
+    """P2 までの暫定: 単一CSV取込は常に楽天 issuer に紐づける。"""
+    issuer = db.query(CardIssuer).filter(CardIssuer.code == "rakuten").first()
+    if issuer is None:
+        raise HTTPException(
+            status_code=500,
+            detail="card issuer 'rakuten' is not seeded",
+        )
+    return int(cast(Any, issuer).id)
+
+
 @router.post("/upload", response_model=StatementUploadResponse, status_code=201)
 async def upload_statement(
     file: UploadFile = File(...),
@@ -97,9 +108,24 @@ async def upload_statement(
     if not required_columns.issubset(columns):
         raise HTTPException(status_code=400, detail="CSV columns are invalid")
 
-    statement = db.query(Statement).filter(Statement.year == year, Statement.month == month).first()
+    # P2 までは issuer 選択なし。常に楽天へ紐づけ（同年月の楽天行のみ置換）。
+    rakuten_id = _rakuten_issuer_id(db)
+    statement = (
+        db.query(Statement)
+        .filter(
+            Statement.year == year,
+            Statement.month == month,
+            Statement.card_issuer_id == rakuten_id,
+        )
+        .first()
+    )
     if statement is None:
-        statement = Statement(year=year, month=month, file_url=file.filename)
+        statement = Statement(
+            year=year,
+            month=month,
+            card_issuer_id=rakuten_id,
+            file_url=file.filename,
+        )
         db.add(statement)
         db.flush()
     else:
