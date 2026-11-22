@@ -122,7 +122,7 @@
   2. 指定/判定した issuer のプロファイルで共通モデルへ変換
   3. ルール分類 → ルール未ヒット分を OpenAI で分類（`OPENAI_API_KEY` 設定時のみ）
   4. `statement_items` に保存
-  5. 全ファイル処理後、妻へ通知送信（未実装の場合あり）
+  5. 全ファイル処理後、成功した issuer についてアップロード完了の LINE を送る（未実装の場合あり。仕様は `docs/notifications/line_notification.md`）
 - レスポンス: 常に `results` 配列（ファイル順）。単一ファイルでも配列1件。
 
 ```json
@@ -371,6 +371,7 @@
 補足:
 
 - `detect-issuer` / `upload` / `upload-status` は **`is_active=true`** の issuer（および紐づくプロファイル）のみ対象。`upload-status` の expected はさらに `include_in_reminder=true`。
+- `remind_day_of_month` は列として残し、作成・更新で受け取ってよい。通知の送信日には使わない（`docs/notifications/line_notification.md`）。
 - `card_issuers.code` および `csv_import_profiles.card_issuer_id` は UNIQUE。重複時は **400**。
 
 ### POST `/card-issuers`
@@ -443,41 +444,43 @@ CSVファイル（複数可）
 
 ## 6. 通知系API（予定）
 
+振る舞いの正本は `docs/notifications/line_notification.md`。本章はその HTTP 契約。
+
+アップロード完了の LINE は `POST /statements/upload` の成功時にサーバーが送る。専用エンドポイントは置かない。
+
 | メソッド | パス | 用途 |
 |----------|------|------|
-| POST | `/notify/remind` | 明細取込リマインド送信（未取込 issuer がある場合） |
-| GET | `/notify/remind.ics` | 毎月リマインド用のカレンダー（`.ics`）配布（任意・認証方針は実装時に決定） |
+| POST | `/notify/statement-mail` | 明細案内メールの着信を受け、未取込なら Gmail とアップロード画面の URL を手順つきで LINE に載せる |
 
-### POST `/notify/remind`
+### POST `/notify/statement-mail`
 
-- 概要: 今日が `remind_day_of_month` に当たる（または再通知日の）issuer のうち、対象年月で未アップロードのものだけ夫へ LINE 通知する。該当がなければ通知せず成功応答。
-- issuer ごとのリマインド日は `card_issuers.remind_day_of_month`（変更可）。初期値: `rakuten=23`, `amex=4`。
-- 呼び出し元: `cron-job.org` または GitHub Actions `schedule` 等（例: 毎日1回叩いてサーバ側で「今日が remind_day か」を判定）。
-- 認証: サービス用シークレット（例: `Authorization: Bearer <REMIND_CRON_SECRET>`）。ユーザー JWT とは別経路。
-- リクエスト例（任意ボディ。省略時はサーバが「今日」と対象年月を決定）:
+- 概要: Apps Script が明細案内メールを見つけたときに呼ぶ。対象年月のその issuer が未取込のときだけ、グループへ LINE を送る。
+- 認証: `Authorization: Bearer <REMIND_CRON_SECRET>`。ユーザー JWT とは別経路。不一致・未設定は 401。
+- `remind_day_of_month` は見ない。`.ics` と `POST /notify/remind` は作らない。
+- リクエスト例:
 
 ```json
 {
+  "card_issuer_code": "rakuten",
+  "source_message_id": "18c0b1ab2f3e4d56",
+  "mail_url": "https://mail.google.com/mail/u/0/#inbox/18c0b1ab2f3e4d56",
   "year": 2026,
-  "month": 3,
-  "force": false
+  "month": 10
 }
 ```
 
-- `force=true` のときは未取込有無に関わらず通知する（手動試験用）。
+- `year` / `month` は任意。省略時は Asia/Tokyo の今日。`force`（任意、既定 `false`）が `true` のときは取込済みでも送る。同じ `source_message_id` は再送しない。
+- `mail_url` は `https://mail.google.com/mail/` で始まること。それ以外は 400。
 - レスポンス例:
 
 ```json
 {
+  "card_issuer_code": "rakuten",
   "year": 2026,
-  "month": 3,
-  "due_issuers": ["amex"],
-  "missing": ["amex"],
-  "notified": true
+  "month": 10,
+  "notified": true,
+  "skip_reason": null
 }
 ```
 
-### GET `/notify/remind.ics`
-
-- 概要: 「毎年毎月 N 日」のリマインドイベントを含む `.ics` を返す。端末カレンダーへ一度登録すればサーバ cron なしでも催促できる補助手段。
-- `N`（日付）は環境変数またはクエリで指定可能とする想定。
+- 200 の `skip_reason` は `already_uploaded` / `duplicate_message` / `issuer_excluded` / `line_not_configured` のいずれか、または送ったとき `null`。200 は再送不要。issuer 不明・URL 不正・年月不正は 400。

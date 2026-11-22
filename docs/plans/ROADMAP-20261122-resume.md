@@ -3,6 +3,7 @@
 | 項目 | 内容 |
 |------|------|
 | 作成日 | 2026-11-22 |
+| 更新日 | 2026-11-23 |
 | 状態 | proposal（レビュー用） |
 | 目的 | 最新仕様と現状実装のギャップを踏まえ、工程順・完了条件を共有する |
 | 詳細計画 | 各工程を着手するとき `create-dev-plan` でコミット単位の計画書を切る |
@@ -25,7 +26,7 @@
 - `card_issuers` / `csv_import_profiles`、`statements.card_issuer_id`
 - プロファイル駆動の汎用CSVエンジン、`detect-issuer`、複数UP、`upload-status`
 - issuer CRUD API、画面の取込バッジ／フィルタ／複数CSV確認UX
-- リマインド（LINE・未取込issuer判定）
+- 明細メール着信の LINE（仕様は `docs/notifications/line_notification.md`。未取込のときだけ送る）
 
 ### 以前からの未了（並行 or 後続）
 
@@ -53,7 +54,7 @@
 | P1 | DB・モデル基盤 | DB設計の実装 | `PLAN-...-issuers-schema.md` |
 | P2 | 取込エンジン・明細API | API設計の実装 | `PLAN-...-csv-engine-upload.md` |
 | P3 | デュアルカードUI | 画面設計の実装 | `PLAN-...-dual-card-ui.md` |
-| P4 | 通知・リマインド | API＋運用 | `PLAN-...-line-remind.md` |
+| P4 | 通知（アップロード完了・明細メール） | API＋Apps Script | `PLAN-...-line-notify.md` |
 | P5 | 運用品質（集計・仕分け・Storage） | API／画面 | 機能ごとに分割可 |
 | P6 | 公開準備（PWA・デプロイ） | インフラ | `PLAN-...-pwa-deploy.md` |
 | P7 | 取込プロファイル管理画面 | 画面（低優先） | `PLAN-...-scr010.md` |
@@ -83,7 +84,7 @@ flowchart TD
 - [x] 実装範囲: デュアルカード＋プロファイル駆動（会社専用パーサは増やさない）
 - [x] Amexサンプル: `sample/amex/*.csv`（cp932）。ヘッダは `ご利用日,データ処理日,ご利用内容,カード会員様名,会員番号 #,金額,...`
 - [x] 楽天サンプル: `sample/rakuten/*.csv`。ヘッダは `利用日,利用店名・商品名,利用者,利用金額,...`
-- [x] リマインド日: **issuer ごとに DB で変更可**。初期値 **楽天=毎月23日 / Amex=毎月4日**（`remind_day_of_month`）
+- [x] リマインド日: いったん issuer ごとの固定日（楽天23日 / Amex4日）としたが、**2026-11-23 に撤回**。きっかけは明細案内メール。`remind_day_of_month` 列は残し、通知条件には使わない
 - [x] インフラ: 本番は Supabase 維持
 
 **LINE 方針（確定）**
@@ -92,9 +93,15 @@ flowchart TD
 - [x] LINE公式アカウント（Messaging API）は必要。**コミュニケーションプラン（月額0円・月200通）で足りる想定**
 - [ ] P4着手時: 公式アカウント作成、グループ招待、グループID取得、チャネルアクセストークンを環境変数へ
 
+**LINE 通知（2026-11-23 確定）**
+
+- [x] 仕様: `docs/notifications/line_notification.md`
+- [x] 明細の取込依頼は、Gmail の明細案内メールを Apps Script が `POST /notify/statement-mail` する。未取込のときだけ、受信メールの URL とアップロード画面の URL を、手順つきでグループへ送る
+- [x] 再通知、固定日 cron、`.ics`、本文からの URL 抽出はやらない
+- [ ] P4着手時: Amex 明細案内の差出人・件名（実メールで決める）
+
 **P0では保留（P4着手前で可）**
 
-- [ ] 再通知間隔（例: 初回日の +3 日）
 - [ ] Amex 名義の正式マップ（サンプルでは `SOTA NAKAJIMA`→夫 / `SEIRA NAKAJIMA`→妻 を仮置き可）
 
 **完了条件（P0）**
@@ -166,21 +173,30 @@ flowchart TD
 
 ---
 
-### P4 通知・リマインド
+### P4 通知（アップロード完了・明細メール）
+
+仕様の正本は `docs/notifications/line_notification.md`。
 
 **何をするか**
 
-- アップロード完了の妻向けLINE
-- `POST /notify/remind`（未取込issuerのみ）＋ cron 想定の秘密鍵
-- （任意）`.ics`
+- アップロード成功時のグループ向け LINE
+- `POST /notify/statement-mail`（秘密鍵。未取込のときだけ、Gmail とアップロード画面の URL を手順つきで載せる）
+- アップロード画面を URL で開く（例: `/upload?year=&month=`）
+- 受理記録テーブル `statement_mail_notifications`
+- Gmail 側の Apps Script（差出人・件名で検索し、処理済みラベルを付ける）
+- 公式アカウント、グループ招待、トークンとグループ ID
 
 **完了条件**
 
-- [ ] 設定日想定の remind 呼び出しで、missing があるときだけ通知される（またはドライランで検証）
-- [ ] アップロード完了通知が動作する（または明示的に「トークン未設定時スキップ」がログで分かる）
-- [ ] 運用手順（cron / 環境変数）が README か memo に残っている
+- [ ] 未取込の issuer への `statement-mail` で、Gmail とアップロード画面の URL を手順つきで載せた LINE が送られる。トークン未設定時は `line_not_configured` を返し、取込 API は失敗しない
+- [ ] 文面のアップロード URL を開くと SCR-005 になり、`year` / `month` が対象年月の初期値になる
+- [ ] 取込済み、または同じメッセージ ID の再送では LINE を送らない
+- [ ] アップロード完了通知が、成功した issuer についてグループへ送られる
+- [ ] 運用手順（Apps Script、環境変数、楽天の検索条件）が README に残っている。Amex の検索条件は実メールが無ければ「未設定」と明記する
 
-**依存:** P2の upload-status（および issuer マスタ）があると実装が素直。
+**依存:** 未取込判定は P2 の statements（issuer・年月）。`upload-status` そのものは呼ばなくてよい。
+
+**create-dev-plan:** API と受理記録 → アップロード完了 → Apps Script の手順、程度に分ける。
 
 ---
 
@@ -242,7 +258,7 @@ flowchart TD
 | DB設計 | 文書更新済み → P1で実装 |
 | API設計 | 文書更新済み → P2で実装 |
 | 画面設計 | 文書更新済み → P3（＋P7）で実装 |
-| 通知・運用設計 | 文書に方針あり → P4で実装 |
+| 通知・運用設計 | `docs/notifications/line_notification.md` → P4で実装 |
 | インフラ | 方針はSupabase維持 → P6 |
 
 新機能を足すときは、毎回「小さな要件/DB/API/画面のdocs更新 Step」を create-dev-plan の先頭に置く（プロジェクトスキルのルールどおり）。
@@ -255,7 +271,7 @@ flowchart TD
 
 1. **P0**（Amexサンプルの扱いだけでも決める）
 2. **P1 → P2 → P3**（デュアルカード取込の縦通し）
-3. **P4**（忘れ防止）
+3. **P4**（明細メールとアップロード完了の LINE）
 4. 必要に応じて P5 → P6。P7は余裕ができてから
 
 ---

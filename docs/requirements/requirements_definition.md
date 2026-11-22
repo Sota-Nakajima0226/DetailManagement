@@ -59,10 +59,9 @@
 | 発行会社の自動判定 | プロファイルのヘッダ指紋等で自動判定し、**画面で確認してから**取込 | 高 |
 | 取込プロファイル管理API | プロファイルの CRUD（カード追加＝マッピング追加）。当面は API/SQL でメンテ | 高 |
 | 取込プロファイル管理画面 | 上記の UI。カード追加のたびにソース修正しないための画面 | 低 |
-| アップロード完了通知 | 完了時に妻へ LINE 通知 | 高 |
-| 明細取込リマインド | issuer ごとの設定日（変更可）に LINE 通知。未取込の場合のみ。初期値: 楽天毎月23日・Amex毎月4日 | 高 |
+| アップロード完了通知 | 取込成功時に LINE グループへ通知。詳細は `docs/notifications/line_notification.md` | 高 |
+| 明細メール着信通知 | 明細案内メールの着信を Apps Script が API に伝え、未取込のときだけ受信メールとアップロード画面の URL を手順つきで LINE 通知する | 高 |
 | アプリ内未完了表示 | 対象月の issuer ごとの取込済み／未取込をヘッダ等で表示 | 高 |
-| カレンダー補助 | 毎月リマインド用 `.ics` のダウンロード（任意） | 低 |
 
 補足（変換方針）:
 
@@ -114,9 +113,11 @@
 
 | 機能 | 詳細 | 優先度 |
 |------|------|--------|
-| アップロード完了通知 | 夫のアップロード完了を妻へ通知 | 高 |
-| 明細取込リマインド | issuer ごとの `remind_day_of_month` に夫へ通知。未取込の issuer のみ。初期値 楽天23日 / Amex4日 | 高 |
+| アップロード完了通知 | 取込成功時に、夫婦＋ボットのグループへ通知 | 高 |
+| 明細メール着信通知 | Gmail の明細案内をきっかけに、未取込の issuer だけ同じグループへ通知する。受信メールとアップロード画面の URL を手順つきで載せる | 高 |
 | 予算超過アラート | 将来的に超過カテゴリを通知 | 低 |
+
+詳細は `docs/notifications/line_notification.md`。毎月の固定日と `.ics` は使わない。`remind_day_of_month` 列は残すが、通知条件には使わない。
 
 ### 4.6 認証
 
@@ -185,11 +186,11 @@ flowchart TD
     supabaseDb["Supabase(PostgreSQL, Storage, Auth)"]
     openaiApi["OpenAI API"]
     lineApi["LINE Messaging API"]
-    cron["Cron(schedule)"]
+    gmail["Gmail / Apps Script"]
 
     clientPWA -->|"HTTPS"| renderApi
     clientPC -->|"HTTPS"| renderApi
-    cron -->|"remind"| renderApi
+    gmail -->|"statement-mail"| renderApi
     renderApi --> supabaseDb
     renderApi --> openaiApi
     renderApi --> lineApi
@@ -199,7 +200,7 @@ flowchart TD
 - APIサーバーはRender上のFastAPIで、明細取込・分類・集計・通知を担当する。
 - データ永続化はSupabase（PostgreSQL/Storage/Auth）で統一する。
 - ルールで分類できない明細は OpenAI API で補完分類し、通知は LINE Messaging API で配信する。
-- 月次リマインドは外部 cron から通知APIを呼び、未取込のカード発行会社がある場合に夫へ通知する。
+- 明細案内メールは Gmail の Apps Script が検知し、未取込のときだけ API がグループへ LINE を送る。
 
 ## 8. 開発フェーズ
 
@@ -214,8 +215,8 @@ flowchart TD
 
 ## 9. 未決事項
 
-- LINE: 宛先は夫婦＋ボットのグループ1つ。コミュニケーションプラン（月額0円・月200通）想定。グループID・トークン取得は P4 着手時。
-- リマインド再通知間隔（例: +3日）。issuer ごとの初回日は確定（楽天23日・Amex4日、DBで変更可）。
+- LINE: 宛先は夫婦＋ボットのグループ1つ。きっかけは明細案内メール（`docs/notifications/line_notification.md`）。グループID・トークン取得は P4 着手時。
+- Amex 明細案内メールの差出人・件名（P4 着手時に実メールで決める）。
 - Amex 名義マップ（ローマ字氏名→夫/妻）の正式な対応表（サンプル上は `SOTA NAKAJIMA` / `SEIRA NAKAJIMA`）。
 - AI分類の確信度しきい値最適化。
 - Render有料移行の判断基準。

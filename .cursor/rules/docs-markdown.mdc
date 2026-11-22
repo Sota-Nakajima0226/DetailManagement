@@ -11,6 +11,7 @@ alwaysApply: false
 | 領域 | 主なファイル |
 |------|----------------|
 | 要件定義 | `docs/requirements/requirements_definition.md` |
+| LINE通知 | `docs/notifications/line_notification.md` |
 | API仕様 | `docs/api/api_specification.md` |
 | 画面一覧 | `docs/screens/screen_list.md` |
 | 画面仕様 | `screen_specification.md` |

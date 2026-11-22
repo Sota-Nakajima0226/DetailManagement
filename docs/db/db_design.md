@@ -36,6 +36,7 @@
 | classification_rules | 店名パターンによる分類ルール |
 | card_issuers | カード発行会社マスタ（issuer） |
 | csv_import_profiles | CSV→共通モデルの列マッピング等 |
+| statement_mail_notifications | 明細案内メールの受理記録（P4 で追加） |
 | statements | 月次明細ファイル情報 |
 | statement_items | 明細行データ（共通モデルの永続化） |
 | fixed_expenses | 固定費マスター |
@@ -84,10 +85,26 @@ issuer の定義。API・画面では `code` を識別子、`display_name` を�
 | code | TEXT UNIQUE | 内部コード（例: `rakuten`, `amex`） |
 | display_name | TEXT | 表示名（例: `楽天`, `Amex`） |
 | is_active | BOOLEAN | 有効フラグ |
-| include_in_reminder | BOOLEAN | 取込リマインド／未完了バッジの対象に含めるか |
-| remind_day_of_month | INT | 毎月のリマインド日（1〜28推奨）。設定変更可能。初期値: 楽天 `23`、Amex `4` |
+| include_in_reminder | BOOLEAN | 明細メール着信の LINE と、未完了バッジの対象に含めるか |
+| remind_day_of_month | INT | 旧・毎月のリマインド日。列は残すが通知条件には使わない（楽天 `23`、Amex `4` の初期値は維持） |
 | sort_order | INT | 表示順 |
 | created_at | TIMESTAMPTZ | 作成日時 |
+
+### statement_mail_notifications（明細メール着信の処理記録）
+
+P4 で追加する。明細案内メールを API が受理した記録。本文は保存しない。現行の初期 DDL には未掲載で、P4 のマイグレーションで作る。
+
+| カラム | 型 | 説明 |
+|--------|----|------|
+| id | SERIAL PK | |
+| card_issuer_id | INT FK | `card_issuers.id` |
+| source_message_id | TEXT UNIQUE | Gmail メッセージ ID |
+| year | INT | 判定に使った年 |
+| month | INT | 判定に使った月 |
+| mail_url | TEXT | Gmail メッセージ URL |
+| notified | BOOLEAN | LINE を送ったか |
+| skip_reason | TEXT | 未送信理由。送信時は NULL |
+| created_at | TIMESTAMPTZ | 受付時刻 |
 
 ### csv_import_profiles（CSV取込プロファイル）
 
