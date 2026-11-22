@@ -5,7 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/api_providers.dart';
 import '../../../core/presentation/main_app_bar_actions.dart';
 import '../../statements/data/statements_api.dart';
+import '../../statements/models/card_issuer.dart';
 import '../../statements/models/category_item.dart';
+import '../../statements/presentation/upload_status_badge.dart';
+import '../../upload/models/upload_status.dart';
 
 class AnalyticsPage extends ConsumerStatefulWidget {
   const AnalyticsPage({super.key});
@@ -21,14 +24,21 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   final DateTime _now = DateTime.now();
   late int _year;
   late int _month;
+  String? _cardIssuer;
   bool _loading = false;
   String? _error;
+  String? _statusError;
   List<dynamic> _categoryTotals = <dynamic>[];
   List<dynamic> _holderTotals = <dynamic>[];
   List<dynamic> _trendSeries = <dynamic>[];
   List<CategoryItem> _categories = <CategoryItem>[];
+  List<CardIssuer> _issuers = <CardIssuer>[];
+  UploadStatus? _uploadStatus;
   _AnalyticsTab _selectedTab = _AnalyticsTab.byCategory;
   int? _focusedPieIndex;
+
+  bool get _noUploads =>
+      _uploadStatus != null && _uploadStatus!.uploaded.isEmpty;
 
   @override
   void initState() {
@@ -49,23 +59,62 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   }
 
   Future<void> _load() async {
+    final year = _year;
+    final month = _month;
+    final issuer = _cardIssuer;
     setState(() {
       _loading = true;
       _error = null;
+      _statusError = null;
+      _uploadStatus = null;
     });
     try {
-      final fromDate = DateTime(_year, _month - 5);
+      UploadStatus? status;
+      try {
+        status = await _api.fetchUploadStatus(year: year, month: month);
+      } catch (e) {
+        if (!mounted || year != _year || month != _month) return;
+        setState(() => _statusError = '取込状況の取得に失敗しました: $e');
+      }
+      if (!mounted || year != _year || month != _month) return;
+
+      final issuers = await _api.fetchCardIssuers();
+      if (!mounted || year != _year || month != _month) return;
+      if (status != null && status.uploaded.isEmpty) {
+        setState(() {
+          _issuers = issuers;
+          _uploadStatus = status;
+          _categoryTotals = <dynamic>[];
+          _holderTotals = <dynamic>[];
+          _trendSeries = <dynamic>[];
+          _focusedPieIndex = null;
+        });
+        return;
+      }
+
+      final fromDate = DateTime(year, month - 5);
       final categories = await _api.fetchCategories();
-      final category = await _api.fetchCategorySummary(year: _year, month: _month);
-      final holder = await _api.fetchHolderSummary(year: _year, month: _month);
+      final category = await _api.fetchCategorySummary(
+        year: year,
+        month: month,
+        cardIssuer: issuer,
+      );
+      final holder = await _api.fetchHolderSummary(
+        year: year,
+        month: month,
+        cardIssuer: issuer,
+      );
       final trend = await _api.fetchMonthlyTrend(
         fromYear: fromDate.year,
         fromMonth: fromDate.month,
-        toYear: _year,
-        toMonth: _month,
+        toYear: year,
+        toMonth: month,
+        cardIssuer: issuer,
       );
-      if (!mounted) return;
+      if (!mounted || year != _year || month != _month) return;
       setState(() {
+        _issuers = issuers;
+        _uploadStatus = status;
         _categories = categories;
         _categoryTotals = (category['totals'] as List<dynamic>? ?? <dynamic>[]);
         _holderTotals = (holder['totals'] as List<dynamic>? ?? <dynamic>[]);
@@ -73,12 +122,12 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
         _focusedPieIndex = null;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || year != _year || month != _month) return;
       setState(() {
         _error = '集計取得に失敗しました: $e';
       });
     } finally {
-      if (mounted) {
+      if (mounted && year == _year && month == _month) {
         setState(() {
           _loading = false;
         });
@@ -133,7 +182,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     final months = List<int>.generate(12, (i) => i + 1);
     final categoryTotalSum = _categoryTotals.fold<int>(
       0,
-      (sum, row) => sum + ((row as Map<String, dynamic>)['amount'] as int? ?? 0),
+      (sum, row) =>
+          sum + ((row as Map<String, dynamic>)['amount'] as int? ?? 0),
     );
 
     return Scaffold(
@@ -156,7 +206,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                   value: _year,
                   isDense: true,
                   items: years
-                      .map((y) => DropdownMenuItem(value: y, child: Text(y.toString())))
+                      .map((y) =>
+                          DropdownMenuItem(value: y, child: Text(y.toString())))
                       .toList(),
                   onChanged: (v) async {
                     if (v == null) return;
@@ -177,7 +228,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                   value: _month,
                   isDense: true,
                   items: months
-                      .map((m) => DropdownMenuItem(value: m, child: Text(m.toString())))
+                      .map((m) =>
+                          DropdownMenuItem(value: m, child: Text(m.toString())))
                       .toList(),
                   onChanged: (v) async {
                     if (v == null) return;
@@ -199,13 +251,55 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String?>(
+            value: _issuers.any((issuer) => issuer.code == _cardIssuer)
+                ? _cardIssuer
+                : null,
+            isDense: true,
+            decoration: const InputDecoration(
+              labelText: 'カード発行会社',
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            items: [
+              const DropdownMenuItem<String?>(
+                value: null,
+                child: Text('すべて'),
+              ),
+              for (final issuer in _issuers)
+                DropdownMenuItem<String?>(
+                  value: issuer.code,
+                  child: Text(issuer.displayName),
+                ),
+            ],
+            onChanged: _loading
+                ? null
+                : (value) async {
+                    setState(() => _cardIssuer = value);
+                    await _load();
+                  },
+          ),
+          const SizedBox(height: 8),
+          UploadStatusBadge(
+            status: _uploadStatus,
+            isLoading: _loading && _uploadStatus == null,
+          ),
+          if (_statusError != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _statusError!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
           if (_error != null) ...[
             const SizedBox(height: 8),
-            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            Text(_error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ],
           const SizedBox(height: 8),
           if (_loading) const Center(child: CircularProgressIndicator()),
-          if (!_loading && _categoryTotals.isEmpty && _holderTotals.isEmpty)
+          if (!_loading && _noUploads)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
               child: Column(
@@ -217,15 +311,14 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    '$_year年$_month月の明細はまだアップロードされていません',
+                    '対象年月の明細はまだアップロードされていません',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                 ],
               ),
             ),
-          if (!_loading &&
-              (_categoryTotals.isNotEmpty || _holderTotals.isNotEmpty)) ...[
+          if (!_loading && !_noUploads) ...[
             Center(
               child: SegmentedButton<_AnalyticsTab>(
                 style: SegmentedButton.styleFrom(
@@ -496,7 +589,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   Widget _buildHolderSummaryCard() {
     final holderTotalSum = _holderTotals.fold<int>(
       0,
-      (sum, row) => sum + ((row as Map<String, dynamic>)['amount'] as int? ?? 0),
+      (sum, row) =>
+          sum + ((row as Map<String, dynamic>)['amount'] as int? ?? 0),
     );
     return Card(
       child: Padding(
@@ -509,9 +603,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
             ..._holderTotals.map((row) {
               final m = row as Map<String, dynamic>;
               final amount = m['amount'] as int? ?? 0;
-              final percent = holderTotalSum == 0
-                  ? 0.0
-                  : amount / holderTotalSum * 100;
+              final percent =
+                  holderTotalSum == 0 ? 0.0 : amount / holderTotalSum * 100;
               return ListTile(
                 dense: true,
                 title: Text('${m['card_holder']}'),
