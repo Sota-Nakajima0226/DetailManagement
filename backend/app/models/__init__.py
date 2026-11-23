@@ -1,3 +1,5 @@
+from typing import cast
+
 from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
@@ -93,11 +95,11 @@ class StatementItem(Base):
 
     @property
     def needs_ai_review(self) -> bool:
-        return (
-            self.classified_by == "ai"
-            and self.ai_confidence is not None
-            and self.ai_confidence <= AI_CONFIDENCE_REVIEW_THRESHOLD
-        )
+        classified_by = cast(str | None, self.classified_by)
+        confidence = cast(float | None, self.ai_confidence)
+        if classified_by != "ai" or confidence is None:
+            return False
+        return confidence <= AI_CONFIDENCE_REVIEW_THRESHOLD
 
 
 class FixedExpense(Base):
@@ -126,4 +128,17 @@ class ManualExpense(Base):
     month = Column(Integer, nullable=False)
     note = Column(Text)
     created_by = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class StatementMailNotification(Base):
+    __tablename__ = "statement_mail_notifications"
+    id = Column(Integer, primary_key=True, index=True)
+    card_issuer_id = Column(Integer, ForeignKey("card_issuers.id"), nullable=False)
+    source_message_id = Column(Text, nullable=False, unique=True)
+    year = Column(Integer, nullable=False)
+    month = Column(Integer, nullable=False)
+    mail_url = Column(Text, nullable=False)
+    notified = Column(Boolean, nullable=False)
+    skip_reason = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
