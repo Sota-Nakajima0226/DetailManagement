@@ -1,3 +1,4 @@
+import argparse
 import json
 import sys
 from datetime import date
@@ -74,7 +75,18 @@ def require_tables(engine: Engine, required_tables: list[str]) -> None:
         )
 
 
-def main() -> None:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Seed master data from backend/master_data.")
+    parser.add_argument(
+        "--skip-users",
+        action="store_true",
+        help="Do not read users.json and do not write the users table.",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = parse_args(argv)
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL is not configured.")
 
@@ -90,14 +102,14 @@ def main() -> None:
     require_tables(engine, required_tables)
 
     metadata = MetaData()
-    users_table = Table("users", metadata, autoload_with=engine)
+    users_table = Table("users", metadata, autoload_with=engine) if not args.skip_users else None
     categories_table = Table("categories", metadata, autoload_with=engine)
     rules_table = Table("classification_rules", metadata, autoload_with=engine)
     fixed_expenses_table = Table("fixed_expenses", metadata, autoload_with=engine)
     issuers_table = Table("card_issuers", metadata, autoload_with=engine)
     profiles_table = Table("csv_import_profiles", metadata, autoload_with=engine)
 
-    users = load_json("users.json")
+    users = [] if args.skip_users else load_json("users.json")
     categories = load_json("categories.json")
     rules = load_json("classification_rules.json")
     fixed_expenses = load_json("fixed_expenses.json")
@@ -106,8 +118,9 @@ def main() -> None:
 
     with Session(engine) as session:
         with session.begin():
-            for user in users:
-                upsert_by_keys(session, users_table, ["email"], user)
+            if not args.skip_users:
+                for user in users:
+                    upsert_by_keys(session, users_table, ["email"], user)
 
             for category in categories:
                 upsert_by_keys(session, categories_table, ["name"], category)
@@ -163,4 +176,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])

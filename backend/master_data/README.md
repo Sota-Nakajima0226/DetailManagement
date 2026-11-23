@@ -9,17 +9,20 @@
 - `card_issuers.json`
 - `csv_import_profiles.json`
 
-登録は以下のスクリプトを実行してください。
+登録は以下のスクリプトを実行してください。デプロイコマンドからは呼びません。本番の初回投入は人間が別途行います。
 
 ```bash
 cd backend
 python scripts/seed_master_data.py
+python scripts/seed_master_data.py --skip-users
 ```
+
+フラグ無しは `users.json` も upsert します。`--skip-users` は `users.json` を読まず、`users` テーブルも更新しません。カテゴリ、分類ルール、固定費、issuer、取込プロファイルはどちらの実行でも入れます。
 
 ## 補足
 
 - `classification_rules.json` / `fixed_expenses.json` は `category_name` でカテゴリを指定します。
 - `csv_import_profiles.json` は `card_issuer_code` で発行会社を指定します。
-- `users.json` は `id`（UUID文字列）を必須にしています。
+- `users.json` は `id`（UUID文字列）を必須にしています。`--skip-users` のときは使いません。
 - 登録時に `categories` から `category_id`、`card_issuers` から `card_issuer_id` を解決して保存します。
 - スクリプトは冪等に動作し、同一キーの既存レコードは更新されます。
