@@ -122,7 +122,7 @@
   2. 指定/判定した issuer のプロファイルで共通モデルへ変換
   3. ルール分類 → ルール未ヒット分を OpenAI で分類（`OPENAI_API_KEY` 設定時のみ）
   4. `statement_items` に保存
-  5. 全ファイル処理後、成功した issuer についてアップロード完了の LINE を送る（未実装の場合あり。仕様は `docs/notifications/line_notification.md`）
+  5. 全ファイル処理後、明細を1件以上保存できた issuer についてアップロード完了の LINE を1通にまとめて送る。保存できた issuer が無い、LINE 未設定、送信失敗でも、この API の応答は変えない。仕様は `docs/notifications/line_notification.md`
 - レスポンス: 常に `results` 配列（ファイル順）。単一ファイルでも配列1件。
 
 ```json

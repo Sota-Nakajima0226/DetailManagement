@@ -33,6 +33,7 @@ from app.services.csv_import_engine import (
     parse_csv_with_profile,
     peek_csv_headers,
 )
+from app.services.line_messaging import notify_upload_completed
 from app.schemas import (
     DetectIssuerCandidate,
     DetectIssuerResponse,
@@ -257,6 +258,7 @@ async def upload_statement(
 
     rules = db.query(ClassificationRule).order_by(desc(ClassificationRule.priority)).all()
     results: list[StatementUploadResultItem] = []
+    completed_names: list[str] = []
 
     for (filename, content, _), issuer_code in zip(file_payloads, resolved_codes):
         issuer, profile = _profile_for_code(pairs, issuer_code)
@@ -348,6 +350,9 @@ async def upload_statement(
             )
             inserted_count += 1
 
+        if inserted_count > 0:
+            completed_names.append(str(cast(Any, issuer).display_name))
+
         results.append(
             StatementUploadResultItem(
                 card_issuer_code=issuer_code,
@@ -359,6 +364,7 @@ async def upload_statement(
         )
 
     db.commit()
+    notify_upload_completed(month, completed_names)
     return StatementUploadResponse(results=results)
 
 
