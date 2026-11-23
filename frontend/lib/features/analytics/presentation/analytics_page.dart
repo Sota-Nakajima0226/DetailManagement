@@ -37,8 +37,11 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   _AnalyticsTab _selectedTab = _AnalyticsTab.byCategory;
   int? _focusedPieIndex;
 
-  bool get _noUploads =>
-      _uploadStatus != null && _uploadStatus!.uploaded.isEmpty;
+  /// 明細も、手動・固定費を含む当月合計も無いときだけ未アップロード文言にする。
+  bool get _showMissingUploadMessage =>
+      _uploadStatus != null &&
+      _uploadStatus!.uploaded.isEmpty &&
+      _categoryTotals.isEmpty;
 
   @override
   void initState() {
@@ -80,17 +83,6 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
 
       final issuers = await _api.fetchCardIssuers();
       if (!mounted || year != _year || month != _month) return;
-      if (status != null && status.uploaded.isEmpty) {
-        setState(() {
-          _issuers = issuers;
-          _uploadStatus = status;
-          _categoryTotals = <dynamic>[];
-          _holderTotals = <dynamic>[];
-          _trendSeries = <dynamic>[];
-          _focusedPieIndex = null;
-        });
-        return;
-      }
 
       final fromDate = DateTime(year, month - 5);
       final categories = await _api.fetchCategories();
@@ -299,7 +291,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           ],
           const SizedBox(height: 8),
           if (_loading) const Center(child: CircularProgressIndicator()),
-          if (!_loading && _noUploads)
+          if (!_loading && _showMissingUploadMessage)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
               child: Column(
@@ -318,7 +310,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 ],
               ),
             ),
-          if (!_loading && !_noUploads) ...[
+          if (!_loading && !_showMissingUploadMessage) ...[
             Center(
               child: SegmentedButton<_AnalyticsTab>(
                 style: SegmentedButton.styleFrom(
