@@ -14,10 +14,34 @@ Apps Script は Google のサーバから API を呼びます。`http://127.0.0.
 
 ## 1. 公式アカウントとトークン
 
-1. [LINE Developers](https://developers.line.biz/) でプロバイダーと Messaging API チャネルを作る。
-2. チャネルの Messaging API 設定で、グループトーク・複数人トークへの参加を許可する。
-3. 同じ画面でチャネルアクセストークン（長期）を発行する。この値は API の `LINE_CHANNEL_ACCESS_TOKEN` にだけ入れる。チャット、ソース、この文書には貼らない。
-4. 通数はコミュニケーションプラン（月200通）を想定しています。
+Messaging API のチャネルは、LINE Developers コンソールから直接は作れません。公式アカウントを作り、管理画面で Messaging API を有効にするとチャネルができます。操作はパソコンのブラウザで行います。スマホの公式アカウントアプリには、この設定がありません。
+
+### 1-1. 公式アカウントを作る
+
+1. [ビジネスIDの登録](https://account.line.biz/signup) を開く。LINE アカウントかメールアドレスで登録する。
+2. 登録が終わると [公式アカウントの作成フォーム](https://entry.line.biz/form/entry/unverified) が出る。必須項目を入れる。アカウント名は、グループに表示される名前になる。業種は個人の家計に近いものを選ぶ。
+3. 作成後、[LINE Official Account Manager](https://manager.line.biz/) に同じアカウントでログインし、作ったアカウントが一覧にあることを確認する。
+4. 料金プランがコミュニケーションプラン（月額0円、月200通）なら、そのままでよい。上位プランへ変えない。
+
+### 1-2. Messaging API を有効にする
+
+管理画面の操作には「管理者」権限が必要です。プロバイダーは、チャネルを束ねる提供者の名前です。一度選ぶと変更できず、Messaging API の連携も解除できません。この家計アプリ専用に、新しいプロバイダーを1つ作ります。
+
+1. 管理画面で作ったアカウントを開く。
+2. 「設定」を押し、「Messaging API」を選ぶ。
+3. 「Messaging APIを利用する」を押す。
+4. LINE Developers を初めて使うアカウントでは、開発者情報の登録が出る。名前とメールアドレスを入れて進む。
+5. プロバイダーの選択で、新しく作る。名前は家計アプリ用と分かるものにする。
+6. 利用規約を確認して「同意する」を押し、確認画面で「OK」を押す。これで Messaging API が有効になり、チャネルができる。
+
+### 1-3. グループへの参加を許可し、長期トークンを発行する
+
+1. 管理画面と同じアカウントで [LINE Developers コンソール](https://developers.line.biz/console/) にログインする。
+2. 手順 1-2 で作ったプロバイダーを押し、いま有効にしたチャネルを開く。
+3. 「Messaging API設定」タブを開く。
+4. 「グループトーク・複数人トークへの参加を許可する」をオンにする。初期値はオフです。オフのままだと、グループへ公式アカウントを招待できません。
+5. 同じタブの「チャネルアクセストークン（長期）」で「発行」を押す。表示された文字列がトークンです。チャネルごとに1つだけで、有効期限はありません。再発行すると、今のトークンは使えなくなります。
+6. トークンは API の `LINE_CHANNEL_ACCESS_TOKEN` にだけ入れる。チャット、ソース、この文書には貼らない。入れる場所は、次の「3. API の環境変数」です。グループ ID が揃うまでは、ファイルへ書かずに控えておいてもよい。
 
 ## 2. グループ ID
 
@@ -67,7 +91,31 @@ Apps Script は Google のサーバから API を呼びます。`http://127.0.0.
 | 楽天 | `info@mail.rakuten-card.co.jp` | `【楽天カード】カードご請求金額のご案内` |
 | Amex | `AmericanExpress@welcome.americanexpress.com` | `ご請求金額確定のご案内` |
 
-## 5. 自分宛メールで到達確認する
+## デプロイ前の受信テスト
+
+アプリを公開する前に、メールの検索と POST の形だけを確認します。LINE は届きません。本番の `statement_mail.js` とは別の Apps Script プロジェクトで行います。
+
+雛形は `scripts/apps_script/statement_mail_test.js` です。認証ヘッダは `Bearer mail-test-dummy` 固定で、`REMIND_CRON_SECRET` は使いません。付くラベルは `detail-management/mail-test` です。本番の `detail-management/notified` は付きません。
+
+1. 明細メールを受信する Gmail で [Apps Script](https://script.google.com/) の新しいプロジェクトを作る。本番用のプロジェクトには貼らない。
+2. `statement_mail_test.js` の中身を貼って保存する。
+3. [webhook.site](https://webhook.site) を開く。画面に出ている `https://webhook.site/` に続く固有の URL をコピーする。`#!/` の付いた画面用の URL は使わない。
+4. プロジェクトの設定で、スクリプトプロパティを入れる。
+
+| プロパティ | 値 |
+|------------|----|
+| `TEST_NOTIFY_URL` | 手順3でコピーした URL |
+| `TEST_STATEMENT_FROM` | 自分の Gmail アドレス |
+| `TEST_STATEMENT_SUBJECT` | `明細通知テスト`。引用符や改行は入れない |
+| `TEST_CARD_ISSUER_CODE` | `rakuten` か `amex`。空なら `rakuten` |
+
+5. その Gmail から自分宛に、件名へ `明細通知テスト` を入れたメールを1通送る。本文は空でよい。
+6. 関数 `checkStatementMailsTest` を実行し、Gmail と外部リクエストの権限を許可する。
+7. 実行ログが `matched threads=1` と `status=200` なら、検索と POST は成功です。webhook.site に届いた JSON に、カードコード、メッセージ ID、`https://mail.google.com/mail/u/0/#inbox/` で始まる URL、年月があることを確認する。`Authorization` が `Bearer mail-test-dummy` であることも確認する。
+8. 同じ関数をもう一度実行する。ログの `matched threads=0` になり、webhook.site に2通目は届かない。メールに `detail-management/mail-test` が付いていれば、未処理だけを探す判定も確認できたことになります。
+9. 15分トリガーも見るときは、関数 `installMailTestTrigger` を1回実行する。左の時計「トリガー」に `checkStatementMailsTest` の15分おきが増える。確認が終わったら、そのトリガーは削除する。
+
+やり直すときは、テストメールから `detail-management/mail-test` を外してから、もう一度実行します。本番の秘密鍵はこのプロジェクトに入れません。
 
 カード会社のアドレスからは送れません。到達確認のあいだだけ、自分のアドレスと件名をスクリプトプロパティに足します。本番の2件はそのまま残ります。
 

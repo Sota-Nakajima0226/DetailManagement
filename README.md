@@ -190,7 +190,7 @@ dev / prod ともに Supabase Auth を使い、認証コードパスを完全に
 
 #### 公式アカウントとグループ ID
 
-1. [LINE Developers](https://developers.line.biz/) でプロバイダーと Messaging API チャネルを作る。
+1. [LINE Official Account Manager](https://manager.line.biz/) で公式アカウントを作り、「設定」→「Messaging API」→「Messaging APIを利用する」でチャネルを作る。Developers コンソールからチャネルは直接作れない。ボタンの順は [docs/notifications/line_setup.md](docs/notifications/line_setup.md) の手順1。
 2. チャネルアクセストークン（長期）を発行し、Render の `LINE_CHANNEL_ACCESS_TOKEN` に入れる。
 3. 公式アカウントを、夫婦とボットだけのグループへ招待する。
 4. グループ ID は、ボット参加時の Webhook イベント `source.groupId` です。このアプリは Webhook を受けないので、Developers コンソールで Webhook を一時的に有効にし、届いたイベントから ID を控えます。控えた値は Render の `LINE_GROUP_ID` に入れ、Webhook URL は外してかまいません。

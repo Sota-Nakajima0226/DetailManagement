@@ -6,6 +6,7 @@
  * 到達確認では TEST_STATEMENT_FROM / TEST_STATEMENT_SUBJECT /
  * TEST_CARD_ISSUER_CODE を足す。年月をずらすときは TEST_YEAR と TEST_MONTH も入れる。
  * 値はこのファイルへ書かない。手順は docs/notifications/line_setup.md。
+ * デプロイ前の受信テストは statement_mail_test.js。このファイルとは別プロジェクトに貼る。
  */
 
 var STATEMENT_MAIL_LABEL = 'detail-management/notified';
