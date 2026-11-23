@@ -274,3 +274,20 @@ class CsvImportProfileResponse(CsvImportProfileBase):
 
     class Config:
         from_attributes = True
+
+
+class StatementMailNotifyRequest(BaseModel):
+    card_issuer_code: str
+    source_message_id: str
+    mail_url: str
+    year: Optional[int] = None
+    month: Optional[int] = None
+    force: bool = False
+
+
+class StatementMailNotifyResponse(BaseModel):
+    card_issuer_code: str
+    year: int
+    month: int
+    notified: bool
+    skip_reason: Optional[str] = None

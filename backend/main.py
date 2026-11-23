@@ -8,6 +8,7 @@ from app.api import (
     fixed_expenses,
     health,
     manual_expenses,
+    notifications,
     rules,
     statements_v2,
 )
@@ -36,3 +37,4 @@ app.include_router(fixed_expenses.router)
 app.include_router(manual_expenses.router)
 app.include_router(card_issuers.router)
 app.include_router(csv_import_profiles.router)
+app.include_router(notifications.router)

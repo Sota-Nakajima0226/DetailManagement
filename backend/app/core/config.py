@@ -67,3 +67,9 @@ SUPABASE_JWT_ALGORITHMS_ASYMMETRIC = frozenset(
     ).split(",")
     if alg.strip()
 )
+
+# 明細メール着信とアップロード完了の LINE。未設定でも取込 API は失敗させない。
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "").strip()
+LINE_GROUP_ID = os.getenv("LINE_GROUP_ID", "").strip()
+APP_UPLOAD_URL = os.getenv("APP_UPLOAD_URL", "").strip()
+REMIND_CRON_SECRET = os.getenv("REMIND_CRON_SECRET", "").strip()
