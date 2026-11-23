@@ -3,11 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/auth/application/auth_providers.dart';
 import '../../features/auth/presentation/login_page.dart';
+import '../../features/upload/presentation/upload_page.dart';
+import '../navigation/app_location.dart';
 import 'main_nav_shell.dart';
 
-/// 未ログイン時は [LoginPage]、ログイン済みは [MainNavShell] を表示する。
+/// 未ログイン時は [LoginPage]、ログイン済みはパスに応じた画面を表示する。
 class AuthGate extends ConsumerWidget {
-  const AuthGate({super.key});
+  const AuthGate({
+    super.key,
+    required this.location,
+  });
+
+  final AppLocation location;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -24,6 +31,12 @@ class AuthGate extends ConsumerWidget {
         final session = state.session;
         if (session == null) {
           return const LoginPage();
+        }
+        if (location.showsUpload) {
+          return UploadPage(
+            initialYear: location.year,
+            initialMonth: location.month,
+          );
         }
         return const MainNavShell();
       },

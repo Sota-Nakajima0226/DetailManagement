@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config/app_config.dart';
+import 'core/navigation/app_route.dart';
+import 'core/navigation/url_strategy.dart';
 import 'core/network/api_client.dart';
-import 'core/presentation/auth_gate.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  configurePathUrlStrategy();
 
   if (!AppConfig.isSupabaseConfigured) {
     runApp(const _ConfigErrorApp());
@@ -46,7 +48,8 @@ class DetailManagementApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const AuthGate(),
+      onGenerateRoute: buildAppRoute,
+      onGenerateInitialRoutes: buildInitialAppRoutes,
     );
   }
 }
