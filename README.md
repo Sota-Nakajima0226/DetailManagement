@@ -41,7 +41,7 @@ cp .env.example .env
 # .env に SUPABASE_URL / SUPABASE_ANON_KEY を設定（Project Settings → API）
 ```
 
-Web 用の `web/` がまだない場合は、`frontend` 内で `flutter create . --platforms=web` などで追加できます。
+ブラウザ向けのエントリは `frontend/web/` にあります。本番の配信手順は下の「本番デプロイ」です。構成の詳細は `requirements_and_design.md` の §13 を参照してください。
 
 ## 起動方法（開発）
 
@@ -130,14 +130,16 @@ dev / prod ともに Supabase Auth を使い、認証コードパスを完全に
 
 | 変数 | 説明 | 既定値 |
 |------|------|--------|
-| `SUPABASE_JWT_SECRET` | Supabase の JWT 秘密鍵（HS256 検証用、必須） | なし |
+| `SUPABASE_URL` | Supabase の Project URL。JWT Signing Keys の検証に使う | なし |
+| `SUPABASE_JWT_SECRET` | Legacy HS256 のときだけ。Signing Keys（ES256 など）では不要 | なし |
 | `SUPABASE_JWT_AUDIENCE` | JWT の audience クレーム | `authenticated` |
-| `SUPABASE_JWT_ALGORITHM` | 署名アルゴリズム | `HS256` |
 
 #### 環境構築の流れ
 
+開発用と本番用は別の Supabase プロジェクトにします。本番の順番は「本番デプロイ」にまとめています。
+
 1. Supabase で **dev 用プロジェクト**と**本番用プロジェクト**を別々に作成する。
-2. 各プロジェクトの管理画面 *Project Settings → API → JWT Settings → JWT Secret* を `SUPABASE_JWT_SECRET` に設定する（`backend/.env` の値は dev 用、Render の環境変数に本番用）。
+2. API には各プロジェクトの `SUPABASE_URL` を入れる。Legacy HS256 のプロジェクトだけ `SUPABASE_JWT_SECRET` を足す（`backend/.env` は dev 用、Render の環境変数は本番用）。
 3. 夫・妻の 2 アカウントを各 Supabase プロジェクトで作成し、UUID を控える。
 4. `users` テーブルに以下のような SQL でレコードを投入する（`role` は `owner` か `member`）。
 
@@ -215,6 +217,47 @@ dev / prod ともに Supabase Auth を使い、認証コードパスを完全に
 雛形が渡す年月は Asia/Tokyo の今日です。請求月と CSV の利用月をずらすときは、Gmail 側のコピーで年月の組み立てだけを直します。API はメール本文を読みません。
 
 到達確認用の差出人・件名はソースに書きません。スクリプトプロパティ `TEST_STATEMENT_FROM`、`TEST_STATEMENT_SUBJECT`、`TEST_CARD_ISSUER_CODE` が揃ったときだけ、その条件も検索します。年月を指定するときは `TEST_YEAR` と `TEST_MONTH` を両方入れます。確認後はこれらのプロパティを消します。
+
+## 本番デプロイ
+
+公開 URL は Render の `*.onrender.com` です。API は Web Service、フロントは Static Site です。定義はリポジトリ直下の `render.yaml` です。秘密の値はリポジトリに置かず、Render の環境変数と Supabase のダッシュボードに入れます。
+
+1. 開発用とは別に、本番用の Supabase プロジェクトを作る。
+2. 認証の Site URL を、静的サイトの `https://….onrender.com` にする。URL は手順 4 のあとで分かるので、分かった時点で設定する。自己登録は使わない。
+3. Supabase のダッシュボードで夫と妻を追加し、メール確認済みにする。表示された UUID を控える。
+4. Render でこの GitHub リポジトリの Blueprint（`render.yaml`）を適用する。サービスは `detail-management-api` と `detail-management-web` です。`render.yaml` が `origin` の `main` に入ってから適用します。
+5. API の環境変数を Render に入れる。`sync: false` の項目は作成時にダッシュボードで聞かれます。
+   - `DATABASE_URL`: Supabase の Session pooler（IPv4）の接続文字列。アプリが `postgresql://` を `postgresql+psycopg://` に読み替えます。
+   - `SUPABASE_URL`: 本番プロジェクトの Project URL。
+   - `OPENAI_API_KEY`: 任意。空ならルールだけで取り込み、AI 分類はスキップします。
+   - `LINE_CHANNEL_ACCESS_TOKEN`、`LINE_GROUP_ID`、`APP_UPLOAD_URL`、`REMIND_CRON_SECRET`: 明細メール通知の4つ。`APP_UPLOAD_URL` の値は手順 8 で決めます。
+   - `LOG_FILE_ENABLED`: `false`。Blueprint にこの値が入っています。ログは stdout を Render の画面で見ます。
+6. フロントのビルドに、次の3つを dart-define として入れる。名前は `frontend/lib/core/config/app_config.dart` と同じです。
+   - `API_BASE_URL`: API の `https://….onrender.com`（パス無し）。
+   - `SUPABASE_URL`: 本番プロジェクトの Project URL。
+   - `SUPABASE_ANON_KEY`: 本番の anon key。ビルド成果物に含まれる公開鍵です。service role と JWT secret は入れません。
+7. 初回だけ、本番の `DATABASE_URL` を環境に入れた状態で `backend` から次を実行する。デプロイコマンドにはシードを入れません。無料枠では pre-deploy が動かないため、API のビルドでも `python -m alembic upgrade head` が走ります。
+
+   ```bash
+   cd backend
+   python -m alembic upgrade head
+   python scripts/seed_master_data.py --skip-users
+   ```
+
+   `--skip-users` はカテゴリ、分類ルール、固定費、issuer、取込プロファイルを入れ、`users.json` は読みません。続けて、手順 3 の UUID を `users` に入れます。
+
+   ```sql
+   INSERT INTO users (id, email, role) VALUES
+     ('<夫のUUID>', 'husband@example.com', 'owner'),
+     ('<妻のUUID>', 'wife@example.com', 'member');
+   ```
+
+8. Render に表示された URL で、次を更新する。
+   - API の `APP_UPLOAD_URL`: 静的サイトの `https://….onrender.com/upload`（クエリ無し）。
+   - Apps Script の `NOTIFY_API_BASE_URL`: API のオリジン（パス無し）。
+9. 以降の反映は、`main` を `origin` へ push してから Render がビルドします。push 前のローカルだけの変更は本番に出ません。
+10. 無料枠の API は、無通信が約15分続くとスリープします。次のリクエストで起動し、応答が数十秒遅くなることがあります。フロントの Static Site はスリープしません。
+11. 確認は次の順です。未ログインで開くとログイン画面になる。ログイン後に明細が見える。`/upload?year=&month=` でアップロード画面が開く。CSV を取り込める。一覧にその明細が出る。API の `/health` は 200 です。
 
 ## 開発時のメモ
 
