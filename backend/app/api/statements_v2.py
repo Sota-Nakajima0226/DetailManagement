@@ -5,7 +5,7 @@ import re
 from typing import Any, List, Optional, cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from sqlalchemy import desc, func, literal_column
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
@@ -34,6 +34,7 @@ from app.services.csv_import_engine import (
     peek_csv_headers,
 )
 from app.services.line_messaging import notify_upload_completed
+from app.services.monthly_summary import category_totals, holder_totals, monthly_trend
 from app.schemas import (
     DetectIssuerCandidate,
     DetectIssuerResponse,
@@ -506,30 +507,15 @@ def get_month_summary(
     card_issuer: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    query = (
-        db.query(
-            StatementItem.category_id,
-            func.coalesce(Category.name, "未分類").label("category_name"),
-            func.sum(StatementItem.amount).label("amount"),
-        )
-        .join(Statement, Statement.id == StatementItem.statement_id)
-        .join(CardIssuer, CardIssuer.id == Statement.card_issuer_id)
-        .outerjoin(Category, Category.id == StatementItem.category_id)
-        .filter(Statement.year == year, Statement.month == month)
-    )
-    if card_issuer:
-        query = query.filter(CardIssuer.code == card_issuer)
-    totals = (
-        query.group_by(StatementItem.category_id, Category.name)
-        .order_by(func.sum(StatementItem.amount).desc())
-        .all()
-    )
+    totals = category_totals(db, year, month, card_issuer)
     return StatementSummaryResponse(
         year=year,
         month=month,
         totals=[
             StatementSummaryItem(
-                category_id=row.category_id, category_name=row.category_name, amount=int(row.amount)
+                category_id=row.category_id,
+                category_name=row.category_name,
+                amount=row.amount,
             )
             for row in totals
         ],
@@ -543,27 +529,13 @@ def get_month_summary_by_holder(
     card_issuer: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    holder_expr = func.coalesce(
-        StatementItem.card_holder,
-        literal_column("'共通'"),
-    ).label("card_holder")
-    amount_sum = func.sum(StatementItem.amount)
-    query = (
-        db.query(
-            holder_expr,
-            amount_sum.label("amount"),
-        )
-        .join(Statement, Statement.id == StatementItem.statement_id)
-        .join(CardIssuer, CardIssuer.id == Statement.card_issuer_id)
-        .filter(Statement.year == year, Statement.month == month)
-    )
-    if card_issuer:
-        query = query.filter(CardIssuer.code == card_issuer)
-    totals = query.group_by(holder_expr).order_by(amount_sum.desc()).all()
+    totals = holder_totals(db, year, month, card_issuer)
     return StatementByHolderSummaryResponse(
         year=year,
         month=month,
-        totals=[StatementByHolderItem(card_holder=row.card_holder, amount=int(row.amount)) for row in totals],
+        totals=[
+            StatementByHolderItem(card_holder=row.card_holder, amount=row.amount) for row in totals
+        ],
     )
 
 
@@ -582,57 +554,19 @@ def get_monthly_trend(
     if from_ym > to_ym:
         raise HTTPException(status_code=400, detail="from period must be before to period")
 
-    query = (
-        db.query(
-            Statement.year,
-            Statement.month,
-            StatementItem.category_id,
-            func.coalesce(Category.name, "未分類").label("category_name"),
-            func.sum(StatementItem.amount).label("amount"),
-        )
-        .join(Statement, Statement.id == StatementItem.statement_id)
-        .outerjoin(Category, Category.id == StatementItem.category_id)
-        .filter((Statement.year * 100 + Statement.month) >= from_ym)
-        .filter((Statement.year * 100 + Statement.month) <= to_ym)
-    )
-    if card_issuer:
-        query = query.join(CardIssuer, CardIssuer.id == Statement.card_issuer_id).filter(
-            CardIssuer.code == card_issuer
-        )
-    if category_id is not None:
-        query = query.filter(StatementItem.category_id == category_id)
-
-    rows = (
-        query.group_by(Statement.year, Statement.month, StatementItem.category_id, Category.name)
-        .order_by(Statement.year.asc(), Statement.month.asc())
-        .all()
-    )
-
-    grouped: dict[tuple[Optional[int], str], list[dict]] = {}
-    for row in rows:
-        key = (row.category_id, row.category_name)
-        grouped.setdefault(key, []).append(
-            {"year": row.year, "month": row.month, "amount": int(row.amount)}
-        )
-
-    series = [
-        MonthlyTrendSeries(
-            category_id=key[0],
-            category_name=key[1],
-            points=[
-                MonthlyTrendPoint(
-                    year=point["year"],
-                    month=point["month"],
-                    amount=point["amount"],
-                )
-                for point in points
-            ],
-        )
-        for key, points in grouped.items()
-    ]
-
+    series = monthly_trend(db, from_year, from_month, to_year, to_month, category_id, card_issuer)
     return StatementMonthlyTrendResponse(
         from_=YearMonthValue(year=from_year, month=from_month),
         to=YearMonthValue(year=to_year, month=to_month),
-        series=series,
+        series=[
+            MonthlyTrendSeries(
+                category_id=row.category_id,
+                category_name=row.category_name,
+                points=[
+                    MonthlyTrendPoint(year=point.year, month=point.month, amount=point.amount)
+                    for point in row.points
+                ],
+            )
+            for row in series
+        ],
     )
