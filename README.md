@@ -168,6 +168,52 @@ dev / prod ともに Supabase Auth を使い、認証コードパスを完全に
 `LOG_AI_CLASSIFICATION_DETAIL=true` は家計情報を含むログになるため、開発・調査時のみ有効にしてください。
 `backend/logs/` 配下のログファイルは Git 管理対象外です。
 
+### LINE通知（明細メール）
+
+明細案内メールが届いたら、未取込のカードだけグループへ取込手順を送ります。CSV の取込が成功したときも、同じグループへ完了を1通送ります。アプリは受信箱を見にいきません。Gmail 側の Apps Script が API を呼びます。
+
+雛形は `scripts/apps_script/statement_mail.js` です。秘密は入れていません。動かす正本は、明細メールを受信する Gmail アカウントの Apps Script にコピーしたものです。
+
+#### 環境変数
+
+値は Git に入れません。名前だけを置き、実値は Render とスクリプトプロパティに入れます。`backend/.env.example` にも同じ名前があります。
+
+| 名前 | 置く場所 | 用途 |
+|------|----------|------|
+| `LINE_CHANNEL_ACCESS_TOKEN` | Render | Messaging API のチャネルアクセストークン |
+| `LINE_GROUP_ID` | Render | 送信先グループ ID |
+| `APP_UPLOAD_URL` | Render | アップロード画面の基点。クエリ無しの `https://` だけ有効。形の例は `https://example.com/upload` |
+| `REMIND_CRON_SECRET` | Render と Apps Script のスクリプトプロパティ | `POST /notify/statement-mail` の秘密鍵。ユーザー JWT とは別 |
+| `NOTIFY_API_BASE_URL` | Apps Script のスクリプトプロパティ | API の基点。パスは付けない。形の例は `https://api.example.com` |
+
+トークンかグループ ID が無いときは LINE を送らず、明細の取込 API は成功のままです。
+
+#### 公式アカウントとグループ ID
+
+1. [LINE Developers](https://developers.line.biz/) でプロバイダーと Messaging API チャネルを作る。
+2. チャネルアクセストークン（長期）を発行し、Render の `LINE_CHANNEL_ACCESS_TOKEN` に入れる。
+3. 公式アカウントを、夫婦とボットだけのグループへ招待する。
+4. グループ ID は、ボット参加時の Webhook イベント `source.groupId` です。このアプリは Webhook を受けないので、Developers コンソールで Webhook を一時的に有効にし、届いたイベントから ID を控えます。控えた値は Render の `LINE_GROUP_ID` に入れ、Webhook URL は外してかまいません。
+5. 通数はコミュニケーションプラン（月200通）を想定しています。
+
+#### Apps Script
+
+1. 受信する Gmail で Apps Script を新規作成し、`scripts/apps_script/statement_mail.js` の中身を貼る。
+2. プロジェクトの設定でスクリプトプロパティ `REMIND_CRON_SECRET` と `NOTIFY_API_BASE_URL` を入れる。ソースには書かない。
+3. `checkStatementMails` を1回実行し、Gmail と外部リクエストの権限を許可する。
+4. `installQuarterHourTrigger` を1回実行する。これで `checkStatementMails` が15分ごとに動く。エディタのトリガー画面で「時間主導型・15分おき」を `checkStatementMails` に付けても同じです。
+5. 処理済みラベルは `detail-management/notified`。API が 200 を返したスレッドだけに付く。400、401、5xx のときは付けないので、次の実行でやり直す。
+6. `UrlFetchApp` の待ち時間は 90 秒。無料枠の Render がスリープから起きる時間を見込んでいる。
+
+検索は差出人と件名の両方です。
+
+| カード | 差出人 | 件名に含む文字列 |
+|--------|--------|------------------|
+| 楽天 | `info@mail.rakuten-card.co.jp` | `【楽天カード】カードご請求金額のご案内` |
+| Amex | `AmericanExpress@welcome.americanexpress.com` | `ご請求金額確定のご案内` |
+
+雛形が渡す年月は Asia/Tokyo の今日です。請求月と CSV の利用月をずらすときは、Gmail 側のコピーで年月の組み立てだけを直します。API はメール本文を読みません。
+
 ## 開発時のメモ
 
 - **バックエンド**: `uvicorn` は `--reload` のため、Python ファイル保存後に自動で再起動します。

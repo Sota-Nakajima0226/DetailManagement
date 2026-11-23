@@ -1,0 +1,121 @@
+/**
+ * 明細案内メールを探し、POST /notify/statement-mail を呼ぶ雛形。
+ *
+ * このファイルは秘密を含まない。動かす正本は Gmail アカウント側の Apps Script。
+ * スクリプトプロパティに REMIND_CRON_SECRET と NOTIFY_API_BASE_URL を置く。
+ * 値はこのファイルへ書かない。
+ */
+
+var STATEMENT_MAIL_LABEL = 'detail-management/notified';
+
+var STATEMENT_MAIL_ISSUERS = [
+  {
+    code: 'rakuten',
+    from: 'info@mail.rakuten-card.co.jp',
+    subject: '【楽天カード】カードご請求金額のご案内',
+  },
+  {
+    code: 'amex',
+    from: 'AmericanExpress@welcome.americanexpress.com',
+    subject: 'ご請求金額確定のご案内',
+  },
+];
+
+function checkStatementMails() {
+  var props = PropertiesService.getScriptProperties();
+  var secret = props.getProperty('REMIND_CRON_SECRET');
+  var baseUrl = props.getProperty('NOTIFY_API_BASE_URL');
+  if (!secret || !baseUrl) {
+    console.log('statement mail skipped: script properties are missing');
+    return;
+  }
+
+  var label = getOrCreateLabel_(STATEMENT_MAIL_LABEL);
+  var yearMonth = tokyoYearMonth_();
+  STATEMENT_MAIL_ISSUERS.forEach(function (issuer) {
+    notifyIssuer_(issuer, baseUrl, secret, label, yearMonth);
+  });
+}
+
+function installQuarterHourTrigger() {
+  var handler = 'checkStatementMails';
+  var exists = ScriptApp.getProjectTriggers().some(function (trigger) {
+    return trigger.getHandlerFunction() === handler;
+  });
+  if (exists) {
+    return;
+  }
+  ScriptApp.newTrigger(handler).timeBased().everyMinutes(15).create();
+}
+
+function notifyIssuer_(issuer, baseUrl, secret, label, yearMonth) {
+  var query = [
+    'from:' + issuer.from,
+    'subject:"' + issuer.subject + '"',
+    '-label:"' + STATEMENT_MAIL_LABEL + '"',
+  ].join(' ');
+  var threads = GmailApp.search(query, 0, 20);
+  threads.forEach(function (thread) {
+    var matched = thread.getMessages().filter(function (message) {
+      return messageMatches_(message, issuer);
+    });
+    if (matched.length === 0) {
+      return;
+    }
+    var allAccepted = matched.every(function (message) {
+      return postStatementMail_(baseUrl, secret, issuer, message, yearMonth) === 200;
+    });
+    if (allAccepted) {
+      thread.addLabel(label);
+    }
+  });
+}
+
+function messageMatches_(message, issuer) {
+  var from = message.getFrom() || '';
+  var subject = message.getSubject() || '';
+  return from.indexOf(issuer.from) !== -1 && subject.indexOf(issuer.subject) !== -1;
+}
+
+function postStatementMail_(baseUrl, secret, issuer, message, yearMonth) {
+  var messageId = message.getId();
+  var endpoint = baseUrl.replace(/\/+$/, '') + '/notify/statement-mail';
+  var payload = {
+    card_issuer_code: issuer.code,
+    source_message_id: messageId,
+    mail_url: 'https://mail.google.com/mail/u/0/#inbox/' + messageId,
+    year: yearMonth.year,
+    month: yearMonth.month,
+  };
+  try {
+    var response = UrlFetchApp.fetch(endpoint, {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        Authorization: 'Bearer ' + secret,
+      },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true,
+      timeoutSeconds: 90,
+    });
+    var status = response.getResponseCode();
+    console.log('statement mail issuer=' + issuer.code + ' status=' + status);
+    return status;
+  } catch (error) {
+    console.log('statement mail request failed issuer=' + issuer.code);
+    return 0;
+  }
+}
+
+function tokyoYearMonth_() {
+  var formatted = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-M');
+  var parts = formatted.split('-');
+  return {
+    year: Number(parts[0]),
+    month: Number(parts[1]),
+  };
+}
+
+function getOrCreateLabel_(name) {
+  return GmailApp.getUserLabelByName(name) || GmailApp.createLabel(name);
+}

@@ -164,7 +164,7 @@ https://mail.google.com/mail/u/0/#inbox/{メッセージID}
 
 ## 8. Google Apps Script
 
-スクリプトはリポジトリの外（Gmail アカウント側）に置く。秘密鍵はスクリプトプロパティに置き、ソースに書かない。
+スクリプトの雛形は `scripts/apps_script/statement_mail.js` に置く。秘密は含まない。動かす正本は Gmail アカウント側へコピーした Apps Script で、秘密鍵はスクリプトプロパティに置く。
 
 - 時間駆動トリガーで周期実行する（目安: 15分ごと）。Gmail に「着信瞬間」のイベントは無いため、Google 側の定期実行で未処理メールを探す。Render 上の cron は置かない。
 - 無料枠の Render はスリープする。`UrlFetchApp` の待ち時間は、起動を見込んで 60 秒以上にする。
