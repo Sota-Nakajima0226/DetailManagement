@@ -3,7 +3,9 @@
  *
  * このファイルは秘密を含まない。動かす正本は Gmail アカウント側の Apps Script。
  * スクリプトプロパティに REMIND_CRON_SECRET と NOTIFY_API_BASE_URL を置く。
- * 値はこのファイルへ書かない。
+ * 到達確認では TEST_STATEMENT_FROM / TEST_STATEMENT_SUBJECT /
+ * TEST_CARD_ISSUER_CODE を足す。年月をずらすときは TEST_YEAR と TEST_MONTH も入れる。
+ * 値はこのファイルへ書かない。手順は docs/notifications/line_setup.md。
  */
 
 var STATEMENT_MAIL_LABEL = 'detail-management/notified';
@@ -32,9 +34,49 @@ function checkStatementMails() {
 
   var label = getOrCreateLabel_(STATEMENT_MAIL_LABEL);
   var yearMonth = tokyoYearMonth_();
-  STATEMENT_MAIL_ISSUERS.forEach(function (issuer) {
-    notifyIssuer_(issuer, baseUrl, secret, label, yearMonth);
+  issuersToCheck_(props).forEach(function (issuer) {
+    notifyIssuer_(issuer, baseUrl, secret, label, yearMonthFor_(issuer, yearMonth));
   });
+}
+
+function issuersToCheck_(props) {
+  var issuers = STATEMENT_MAIL_ISSUERS.slice();
+  var testFrom = (props.getProperty('TEST_STATEMENT_FROM') || '').trim();
+  var testSubject = (props.getProperty('TEST_STATEMENT_SUBJECT') || '').trim();
+  var testCode = (props.getProperty('TEST_CARD_ISSUER_CODE') || '').trim();
+  var testYear = (props.getProperty('TEST_YEAR') || '').trim();
+  var testMonth = (props.getProperty('TEST_MONTH') || '').trim();
+  if (!testFrom && !testSubject && !testCode && !testYear && !testMonth) {
+    return issuers;
+  }
+  if (!testFrom || !testSubject || !testCode) {
+    console.log('statement mail test search skipped: from, subject, and issuer code are required');
+    return issuers;
+  }
+  var entry = {
+    code: testCode,
+    from: testFrom,
+    subject: testSubject,
+  };
+  if (testYear || testMonth) {
+    var year = Number(testYear);
+    var month = Number(testMonth);
+    if (!testYear || !testMonth || !isFinite(year) || !isFinite(month) || year < 1 || month < 1 || month > 12) {
+      console.log('statement mail test search skipped: year and month must both be set');
+      return issuers;
+    }
+    entry.year = year;
+    entry.month = month;
+  }
+  issuers.push(entry);
+  return issuers;
+}
+
+function yearMonthFor_(issuer, fallback) {
+  if (issuer.year && issuer.month) {
+    return { year: issuer.year, month: issuer.month };
+  }
+  return fallback;
 }
 
 function installQuarterHourTrigger() {
@@ -99,7 +141,21 @@ function postStatementMail_(baseUrl, secret, issuer, message, yearMonth) {
       timeoutSeconds: 90,
     });
     var status = response.getResponseCode();
-    console.log('statement mail issuer=' + issuer.code + ' status=' + status);
+    var notified = '';
+    var skipReason = '';
+    try {
+      var body = JSON.parse(response.getContentText() || '{}');
+      notified = body.notified;
+      skipReason = body.skip_reason || '';
+    } catch (parseError) {
+      skipReason = '';
+    }
+    console.log(
+      'statement mail issuer=' + issuer.code +
+      ' status=' + status +
+      ' notified=' + notified +
+      ' skip_reason=' + skipReason
+    );
     return status;
   } catch (error) {
     console.log('statement mail request failed issuer=' + issuer.code);

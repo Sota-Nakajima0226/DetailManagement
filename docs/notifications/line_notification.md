@@ -173,6 +173,7 @@ https://mail.google.com/mail/u/0/#inbox/{メッセージID}
   - Amex: 差出人 `AmericanExpress@welcome.americanexpress.com`、件名に `ご請求金額確定のご案内` を含む
 - 処理済みラベル（例: `detail-management/notified`）が付いたメールは検索から外す。
 - 認証ヘッダは `Authorization: Bearer <REMIND_CRON_SECRET>`。Supabase のアクセストークンは使わない（短時間で期限切れになるため）。
+- 到達確認のときだけ、スクリプトプロパティで差出人・件名を1件足せる。本番の楽天・Amex の条件はソースのまま。確認が終わったらそのプロパティは消す。設定手順は `docs/notifications/line_setup.md`。
 
 ## 9. データ
 

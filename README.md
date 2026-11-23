@@ -172,7 +172,7 @@ dev / prod ともに Supabase Auth を使い、認証コードパスを完全に
 
 明細案内メールが届いたら、未取込のカードだけグループへ取込手順を送ります。CSV の取込が成功したときも、同じグループへ完了を1通送ります。アプリは受信箱を見にいきません。Gmail 側の Apps Script が API を呼びます。
 
-雛形は `scripts/apps_script/statement_mail.js` です。秘密は入れていません。動かす正本は、明細メールを受信する Gmail アカウントの Apps Script にコピーしたものです。
+雛形は `scripts/apps_script/statement_mail.js` です。秘密は入れていません。動かす正本は、明細メールを受信する Gmail アカウントの Apps Script にコピーしたものです。公式アカウント、トークン、グループ ID、Apps Script、自分宛メールでの到達確認は [docs/notifications/line_setup.md](docs/notifications/line_setup.md) にまとめています。
 
 #### 環境変数
 
@@ -213,6 +213,8 @@ dev / prod ともに Supabase Auth を使い、認証コードパスを完全に
 | Amex | `AmericanExpress@welcome.americanexpress.com` | `ご請求金額確定のご案内` |
 
 雛形が渡す年月は Asia/Tokyo の今日です。請求月と CSV の利用月をずらすときは、Gmail 側のコピーで年月の組み立てだけを直します。API はメール本文を読みません。
+
+到達確認用の差出人・件名はソースに書きません。スクリプトプロパティ `TEST_STATEMENT_FROM`、`TEST_STATEMENT_SUBJECT`、`TEST_CARD_ISSUER_CODE` が揃ったときだけ、その条件も検索します。年月を指定するときは `TEST_YEAR` と `TEST_MONTH` を両方入れます。確認後はこれらのプロパティを消します。
 
 ## 開発時のメモ
 
