@@ -174,12 +174,13 @@
 | 認証 | Supabase Auth | メール認証を短期間で構築できるため |
 | AI分類 | OpenAI API | 実装済み経路。店名からのカテゴリ推定に利用 |
 | 通知 | LINE Messaging API | 家族運用で導入コストが低いため |
-| ホスティング | Render | GitHub連携による自動デプロイが容易なため |
+| ホスティング | Render（API は Web Service、フロントは Static Site） | GitHub の push で自動デプロイでき、公開 URL は `*.onrender.com` のため |
 | CI/CD | GitHub -> Render 自動デプロイ | push起点で反映でき、運用負荷を抑えられるため |
 
 インフラ方針:
 
 - **本番はコスト優先で Supabase + Render を維持する。** AWS への載せ替えは本アプリの必須要件としない。
+- 本番の Supabase は開発用と別プロジェクトにする。API の `DATABASE_URL` は Session pooler を使う。フロントはビルド時の `API_BASE_URL`、`SUPABASE_URL`、`SUPABASE_ANON_KEY` で本番へつなぐ。サービス分割、起動コマンド、初回データの手順は `requirements_and_design.md` §13。
 - AWS は学習用サンドボックス、または別自作アプリでの利用を想定する（比較は `memo/infra_cost_comparison.md`）。
 
 ## 7. システム構成図

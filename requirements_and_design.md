@@ -679,16 +679,30 @@ my_app/
 
 ### 環境変数（backend/.env）
 
+値は Git に入れない。ローカルは `backend/.env`、本番は Render の環境変数に置く。本番の Supabase は開発用とは別プロジェクトにする。
+
 ```env
-DATABASE_URL=postgresql://...      # Supabase から取得
-ANTHROPIC_API_KEY=sk-ant-...
-LINE_NOTIFY_TOKEN_WIFE=...
-LINE_NOTIFY_TOKEN_HUSBAND=...
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_SERVICE_KEY=...
+# 本番は Supabase の Session pooler（IPv4）。アプリが postgresql:// を postgresql+psycopg:// に読み替える
+DATABASE_URL=postgresql://...
+# Project Settings → API の Project URL。JWT はここの JWKS で検証する
+SUPABASE_URL=https://xxxx.supabase.co
+# Legacy HS256 のプロジェクトだけ追加する
+# SUPABASE_JWT_SECRET=
+OPENAI_API_KEY=
+LINE_CHANNEL_ACCESS_TOKEN=
+LINE_GROUP_ID=
+# クエリ無しの https://。手順の年月は API が付ける。例: https://xxxx.onrender.com/upload
+APP_UPLOAD_URL=
+REMIND_CRON_SECRET=
+# 本番は stdout のみ。Render のログ画面で見る
+LOG_FILE_ENABLED=false
 ```
 
+フロントに焼く値はビルド時の dart-define で、名前は `API_BASE_URL`、`SUPABASE_URL`、`SUPABASE_ANON_KEY`。anon key は成果物に含まれる公開鍵である。service role と JWT secret はフロントに置かない。
+
 ### デプロイフロー
+
+公開 URL は Render が発行する `*.onrender.com` を使う。独自ドメインは置かない。定義はリポジトリ直下の `render.yaml`（Blueprint）に置く。
 
 ```
 ローカルで開発・動作確認
@@ -697,32 +711,55 @@ SUPABASE_SERVICE_KEY=...
 git push origin main
   │
   ▼
-GitHub がRenderに通知
+GitHub が Render に通知
   │
-  ├─► Render（バックエンド）: pip install → uvicorn 起動
-  └─► Render（フロントエンド）: flutter build web → 静的ファイル配信
+  ├─► API（Web Service、ルート backend/）
+  │     pip install → alembic upgrade head → uvicorn 起動
+  └─► フロント（Static Site）
+        Flutter SDK を入れて flutter build web → build/web を配信
   │
   ▼
-数分で本番に反映
+*.onrender.com に反映
 ```
+
+マイグレーションはデプロイごとに行う。シードはデプロイコマンドに入れない。初回だけ人間が実行する。無料枠の API は、無通信が続くとスリープする。フロントの Static Site はスリープしない。
 
 ### Render の設定
 
-**バックエンド（Web Service）**
+**API（Web Service）**
 
 ```
+Root Directory: backend
 Build Command: pip install -r requirements.txt
+Pre-Deploy Command: python -m alembic upgrade head
 Start Command: uvicorn main:app --host 0.0.0.0 --port $PORT
+Health Check Path: /health
 ```
 
-Python ランタイムは `runtime.txt` で 3.11 系に固定する。
+Python は `backend/runtime.txt` の `python-3.11.3` に固定する。`DATABASE_URL` は Session pooler の接続文字列にする。
 
 **フロントエンド（Static Site）**
 
+ビルドでピン留めした Flutter SDK を入れ、次を実行する。`API_BASE_URL` は API の `https://….onrender.com`（パス無し）。
+
 ```
-Build Command: flutter build web --dart-define=API_URL=https://xxx.onrender.com
+flutter build web \
+  --dart-define=API_BASE_URL=https://<api>.onrender.com \
+  --dart-define=SUPABASE_URL=https://<project>.supabase.co \
+  --dart-define=SUPABASE_ANON_KEY=<anon-key>
 Publish Directory: build/web
 ```
+
+`/upload` だけを `index.html` に戻す。`/` は `index.html` がそのまま出る。`main.dart.js` などのアセットは書き戻さない。
+
+### 初回データ
+
+空の本番 DB に対し、マイグレーションのあとで一度だけ入れる。
+
+- カテゴリ、分類ルール、issuer、取込プロファイル、`backend/master_data/fixed_expenses.json` の固定費
+- ユーザーはシードしない。本番 Auth のダッシュボードで夫と妻をメール確認済みで作り、その UUID を `users` に SQL で入れる。自己登録は使わない。Auth の Site URL は静的サイトの URL にする
+
+`APP_UPLOAD_URL` は静的サイトの `https://….onrender.com/upload`（クエリ無し）。Apps Script の `NOTIFY_API_BASE_URL` は API のオリジン（パス無し）。どちらもサービス作成後に入れる。
 
 ---
 
