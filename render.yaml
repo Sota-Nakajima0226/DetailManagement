@@ -1,0 +1,48 @@
+# Render Blueprint。値のある秘密は置かない。sync: false は作成時にダッシュボードで入れる。
+services:
+  - type: web
+    name: detail-management-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt && python -m alembic upgrade head
+    # 有料プランではデプロイ前にもマイグレーションする。無料枠ではこのコマンドは動かない。
+    preDeployCommand: python -m alembic upgrade head
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: LOG_FILE_ENABLED
+        value: "false"
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: LINE_CHANNEL_ACCESS_TOKEN
+        sync: false
+      - key: LINE_GROUP_ID
+        sync: false
+      - key: APP_UPLOAD_URL
+        sync: false
+      - key: REMIND_CRON_SECRET
+        sync: false
+
+  - type: web
+    runtime: static
+    name: detail-management-web
+    buildCommand: bash scripts/render_build_web.sh
+    # サービスルートはリポジトリ直下。公開先は frontend の build/web。
+    staticPublishPath: frontend/build/web
+    routes:
+      # 実ファイルがあるパス（main.dart.js など）は Render が先に配信する。
+      - type: rewrite
+        source: /upload
+        destination: /index.html
+    envVars:
+      - key: API_BASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
