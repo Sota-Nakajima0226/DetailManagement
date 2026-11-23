@@ -236,7 +236,7 @@ dev / prod ともに Supabase Auth を使い、認証コードパスを完全に
    - `API_BASE_URL`: API の `https://….onrender.com`（パス無し）。
    - `SUPABASE_URL`: 本番プロジェクトの Project URL。
    - `SUPABASE_ANON_KEY`: 本番の anon key。ビルド成果物に含まれる公開鍵です。service role と JWT secret は入れません。
-7. 初回だけ、本番の `DATABASE_URL` を環境に入れた状態で `backend` から次を実行する。デプロイコマンドにはシードを入れません。無料枠では pre-deploy が動かないため、API のビルドでも `python -m alembic upgrade head` が走ります。
+7. 初回だけ、本番の `DATABASE_URL` を環境に入れた状態で `backend` から次を実行する。デプロイコマンドにはシードを入れません。マイグレーションは API のビルドで `python -m alembic upgrade head` が走ります。無料枠は pre-deploy を拒否するため、Blueprint には入れていません。
 
    ```bash
    cd backend

@@ -730,11 +730,12 @@ GitHub が Render に通知
 
 ```
 Root Directory: backend
-Build Command: pip install -r requirements.txt
-Pre-Deploy Command: python -m alembic upgrade head
+Build Command: pip install -r requirements.txt && python -m alembic upgrade head
 Start Command: uvicorn main:app --host 0.0.0.0 --port $PORT
 Health Check Path: /health
 ```
+
+無料枠の Blueprint は `preDeployCommand` を拒否する。マイグレーションはビルドコマンドで行う。
 
 Python は `backend/runtime.txt` の `python-3.11.3` に固定する。`DATABASE_URL` は Session pooler の接続文字列にする。
 
