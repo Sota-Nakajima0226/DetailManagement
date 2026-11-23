@@ -263,6 +263,19 @@ class StatementsApi {
     await _dio.delete<void>('/categories/$id');
   }
 
+  Future<void> validateRule({
+    required String pattern,
+    required bool isRegex,
+  }) async {
+    await _dio.post<void>(
+      '/rules/validate',
+      data: {
+        'pattern': pattern,
+        'is_regex': isRegex,
+      },
+    );
+  }
+
   Future<List<Map<String, dynamic>>> fetchRules() async {
     final response = await _dio.get<List<dynamic>>('/rules');
     return _asMapList(response.data);

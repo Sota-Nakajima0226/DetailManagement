@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -114,23 +115,41 @@ class _RulesPageState extends ConsumerState<RulesPage> {
       return;
     }
 
-    if (item == null) {
-      await _api.createRule(
-        pattern: pattern.text.trim(),
-        isRegex: isRegex,
-        categoryId: categoryId!,
-        priority: parsedPriority,
+    try {
+      if (item == null) {
+        await _api.createRule(
+          pattern: pattern.text.trim(),
+          isRegex: isRegex,
+          categoryId: categoryId!,
+          priority: parsedPriority,
+        );
+      } else {
+        await _api.updateRule(
+          id: item['id'] as int,
+          pattern: pattern.text.trim(),
+          isRegex: isRegex,
+          categoryId: categoryId!,
+          priority: parsedPriority,
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_apiErrorDetail(e))),
       );
-    } else {
-      await _api.updateRule(
-        id: item['id'] as int,
-        pattern: pattern.text.trim(),
-        isRegex: isRegex,
-        categoryId: categoryId!,
-        priority: parsedPriority,
-      );
+      return;
     }
     await _load();
+  }
+
+  String _apiErrorDetail(Object error) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      if (data is Map && data['detail'] != null) {
+        return data['detail'].toString();
+      }
+    }
+    return '$error';
   }
 
   Future<void> _delete(int id) async {
