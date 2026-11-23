@@ -304,10 +304,30 @@
 
 | メソッド | パス | 説明 |
 |----------|------|------|
-| GET | `/rules` | 一覧取得 |
+| GET | `/rules` | 一覧取得（`priority` 降順、同点は `id` 昇順） |
+| POST | `/rules/validate` | パターンを検証する。保存しない |
 | POST | `/rules` | 新規作成 |
 | PUT | `/rules/{id}` | 更新 |
 | DELETE | `/rules/{id}` | 削除 |
+
+パターンの共通検証（`POST /rules/validate`、`POST /rules`、`PUT /rules/{id}`）:
+
+- `pattern` の前後の空白を除いたあとに文字が残らなければ **400**。作成・更新は DB を変えない。
+- `is_regex = false` のときは、正規表現として `re.compile` しない。
+- `is_regex = true` で Python の `re.compile` できないときは **400**。作成・更新は DB を変えない。
+- 優先度の自動計算と、同じパターンの行をまとめて更新することはしない。仕分け画面が `GET /rules`、`POST /rules`、`PUT /rules/{id}` で行う。
+
+### POST `/rules/validate`
+
+```json
+{
+  "pattern": "セブン",
+  "is_regex": false
+}
+```
+
+- 保存しない。`category_id` と `priority` は受け取らない。
+- 共通検証を満たせば **204**（ボディなし）。前後の空白を除いて空、または壊れた正規表現は **400**。
 
 ### POST `/rules`
 
@@ -322,6 +342,13 @@
 
 - バリデーション:
   - `priority` は `0` 以上の整数
+  - パターンは共通検証に従う。違反時は **400** で行を作らない
+
+### PUT `/rules/{id}`
+
+- ボディは作成と同じ。
+- 対象が無いときは **404**。
+- パターンは共通検証に従う。違反時は **400** でその行を更新しない。
 
 ## 3.4 固定費
 
@@ -429,7 +456,9 @@
 ## 4. 分類ロジック仕様
 
 分類優先順位:
-1. `classification_rules` を `priority` 降順で評価。
+1. `classification_rules` を `priority` 降順で評価する。`priority` が同じときは `id` が小さい方を先に評価する。
+   - `is_regex = false`: パターン文字列が店名に含まれる（部分一致）。
+   - `is_regex = true`: Python の `re.search`。`re.compile` できないパターンは §3.3 のとおり保存できない。
 2. 未ヒット時は、環境変数 `OPENAI_API_KEY` が設定されていれば OpenAI（Chat Completions）で店名からカテゴリを推定。未設定のときは AI を呼ばず未分類のまま取り込む。
 3. AI 確信度が閾値未満（既定 `AI_CLASSIFICATION_CONFIDENCE_THRESHOLD=0.7`）の場合は `category_id = NULL` のまま保存し、UI 上は「未分類」として表示する（マスタの「その他」とは別物）。閾値未満でも `ai_confidence` / `ai_raw_response` に推定結果を残す場合がある（デバッグ用）。
 
@@ -439,6 +468,7 @@
 - ルール一致時: `classified_by = "rule"`
 - AI 採用時（確信度 >= 閾値）: `classified_by = "ai"`, `ai_confidence` を保存
 - 手動修正時: `classified_by = "manual"`
+- 仕分け画面でルールを追加・更新しても、その明細以外の行は変えない。ルールが効くのは次回の取込からである。
 
 一覧画面の要確認表示:
 - AI 分類採用後も `AI_CONFIDENCE_REVIEW_THRESHOLD`（既定 `0.8`）以下の明細は `needs_ai_review = true` として返し、UI で低信頼度行として強調表示する。
