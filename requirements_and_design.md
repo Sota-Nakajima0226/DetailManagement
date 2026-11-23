@@ -347,7 +347,7 @@ CREATE VIEW monthly_expenses AS
   FROM manual_expenses me;
 ```
 
-> 固定費は集計時にFastAPI側で `valid_from <= 対象月 AND (valid_until IS NULL OR valid_until >= 対象月)` でフィルタして動的に加算する。
+> 固定費はビューに含めず、発行会社を指定しない月次集計のときだけ API が足す。`valid_from` がその月の末日以前、かつ `valid_until` が NULL またはその月の1日以降で、`is_active = true` の行を満額加算する。日割りせず、`billing_day` は使わない。明細との重複は自動除外しない。
 
 ### DDL（初期テーブル作成）
 
@@ -730,7 +730,7 @@ Publish Directory: build/web
 - [ ] Renderのスリープが許容できなくなった場合の有料プラン移行タイミング
 - [ ] 楽天カードCSVのカラム名・フォーマット確認（実際にダウンロードして検証が必要）
 - [ ] 将来的なネイティブアプリ化の要否（PWAで満足できるか使いながら判断）
-- [ ] 固定費と明細の重複計上を防ぐロジックの詳細設計
+- [x] 固定費と明細の重複計上は自動除外しない。明細に載らない支払いだけを固定費として登録する
 
 ---
 

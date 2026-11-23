@@ -198,10 +198,21 @@
 
 ### GET `/statements/summary`
 
+- 概要: 対象月のカテゴリ別合計。レスポンスのキーは変えない。内訳（明細／手動／固定費）は返さない。同じ `category_id` は一つの `amount` にまとめ、金額の降順で返す。
+- `GET /statements` の行には、手動支払いと固定費を出さない。
 - クエリパラメータ:
   - `year`（必須）
   - `month`（必須）
-  - `card_issuer`（任意。`card_issuers.code`。未指定時は全 issuer 合算）
+  - `card_issuer`（任意。`card_issuers.code`）
+- 集計に含めるもの:
+  - `card_issuer` を省略したとき、または空文字のとき、次を同じカテゴリへ合算する。
+    - 全発行会社のカード明細
+    - `manual_expenses.year` / `month` が対象年月の手動支払い。利用日が別月でも、この年月に従う
+    - 対象月に有効、かつ `is_active = true` の固定費
+  - `card_issuer` に code を指定したときは、その code の明細だけ。手動と固定費は足さない
+  - 未知の code は明細 0 件で、手動と固定費も足さない
+- 固定費が対象月に入る条件は、期間がその月のどこか1日でも重なること。`valid_from` がその月の末日以前、かつ `valid_until` が NULL またはその月の1日以降。満額を足し、日割りしない。`billing_day` は集計に使わない。`is_active = false` は期間内でも足さない。明細と同じ支払いを固定費にも登録しても、自動では除外しない
+- 例: `valid_from = 2026-03-15` かつ `valid_until` が NULL なら 2026-03 から満額。`valid_until = 2026-03-01` なら 2026-03 は含め、2026-04 は含めない。`valid_from = 2026-04-01` なら 2026-03 は含めない
 - レスポンス例:
 
 ```json
@@ -217,6 +228,9 @@
 
 ### GET `/statements/summary/by-holder`
 
+- 概要: 対象月の名義人別合計。レスポンスのキーは変えない。内訳（明細／手動／固定費）は返さない。`totals` は金額の降順。
+- 含める範囲は `GET /statements/summary` と同じ。発行会社未指定（省略または空文字）は明細・手動・有効な固定費の合算、指定時と未知の code は明細だけ。
+- 名義人が NULL の手動支払いは、明細と同じく `共通` にまとめる。固定費の `card_holder` の既定は `共通` で、NULL のときも `共通` にまとめる。
 - クエリパラメータ:
   - `year`（必須）
   - `month`（必須）
@@ -237,14 +251,16 @@
 
 ### GET `/statements/summary/monthly-trend`
 
-- 概要: 指定期間のカテゴリ別月次推移を返す（棒グラフ用）。
+- 概要: 指定期間のカテゴリ別月次推移を返す（棒グラフ用）。期間内の各月に `GET /statements/summary` と同じ合算規則を適用する。発行会社未指定（省略または空文字）は明細・手動・有効な固定費の合算、指定時と未知の code は明細だけ。
+- レスポンスのキーは変えない。内訳（明細／手動／固定費）は返さない。同じ `category_id` は一つの series にまとめる。
+- `category_id` を指定したときは、そのカテゴリの明細だけに絞る。発行会社未指定のときは、同じカテゴリの手動支払いと固定費だけを足す。
 - クエリパラメータ:
   - `from_year`（必須）
   - `from_month`（必須）
   - `to_year`（必須）
   - `to_month`（必須）
   - `category_id`（任意、未指定時は全カテゴリ）
-  - `card_issuer`（任意。`card_issuers.code`。未指定時は全 issuer 合算）
+  - `card_issuer`（任意。`card_issuers.code`）
 - レスポンス例:
 
 ```json

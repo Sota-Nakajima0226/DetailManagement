@@ -231,7 +231,7 @@ issuer ごとの CSV → 共通モデル変換設定。カード追加時は本�
 
 ## 7. 月次集計ビュー
 
-`monthly_expenses` でカード明細由来データと手動支払いを統合する。
+`monthly_expenses` はカード明細と手動支払いだけを一つの行集合にする。固定費の行はビューに無い。
 
 ```sql
 CREATE VIEW monthly_expenses AS
@@ -258,7 +258,13 @@ CREATE VIEW monthly_expenses AS
   FROM manual_expenses me;
 ```
 
-固定費はビューに物理保存せず、API集計時に対象月条件で動的加算する。
+手動側の `card_issuer_code` / `card_issuer_name` は NULL のままとする。`fixed_expenses` と `manual_expenses` に発行会社列は無く、固定費用の `card_issuers` 行は作らない。手動支払いはビュー上の `year` / `month` が `manual_expenses` の同名列で、集計はこの年月に従う。`used_at` が別月でも振り替えない。
+
+固定費は API の月次集計（`GET /statements/summary`、`by-holder`、`monthly-trend`）が、発行会社未指定のときだけ足す。発行会社を指定した集計、および未知の code では足さない。明細一覧には出さない。
+
+対象月に入る条件は、期間がその月のどこか1日でも重なること。`valid_from` がその月の末日以前、かつ `valid_until` が NULL またはその月の1日以降。満額を足し、日割りしない。`billing_day` は集計に使わない。`is_active = false` は期間が重なっても足さない。明細との店名照合などによる重複除外はしない。固定費は明細に載らない支払いとして登録する。
+
+例: `valid_from = 2026-03-15` かつ `valid_until` が NULL なら 2026-03 から満額。`valid_until = 2026-03-01` なら 2026-03 は含め、2026-04 は含めない。`valid_from = 2026-04-01` なら 2026-03 は含めない。
 
 ## 8. 初期DDL
 
