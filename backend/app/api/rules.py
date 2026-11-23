@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
@@ -10,7 +10,16 @@ from app.schemas import (
     ClassificationRuleCreate,
     ClassificationRuleResponse,
     ClassificationRuleUpdate,
+    ClassificationRuleValidate,
 )
+from app.services.classification_rules import RulePatternError, validate_rule_pattern
+
+
+def _ensure_pattern(pattern: str, is_regex: bool) -> None:
+    try:
+        validate_rule_pattern(pattern, is_regex)
+    except RulePatternError as exc:
+        raise HTTPException(status_code=400, detail=exc.detail) from exc
 
 
 router = APIRouter(
@@ -29,8 +38,15 @@ def list_rules(db: Session = Depends(get_db)):
     )
 
 
+@router.post("/validate", status_code=204)
+def validate_rule(body: ClassificationRuleValidate) -> Response:
+    _ensure_pattern(body.pattern, body.is_regex)
+    return Response(status_code=204)
+
+
 @router.post("", response_model=ClassificationRuleResponse, status_code=201)
 def create_rule(body: ClassificationRuleCreate, db: Session = Depends(get_db)):
+    _ensure_pattern(body.pattern, body.is_regex)
     item = ClassificationRule(**body.model_dump())
     db.add(item)
     db.commit()
@@ -43,6 +59,7 @@ def update_rule(rule_id: int, body: ClassificationRuleUpdate, db: Session = Depe
     item = db.query(ClassificationRule).filter(ClassificationRule.id == rule_id).first()
     if item is None:
         raise HTTPException(status_code=404, detail="Rule not found")
+    _ensure_pattern(body.pattern, body.is_regex)
     for key, value in body.model_dump().items():
         setattr(item, key, value)
     db.commit()

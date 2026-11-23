@@ -161,6 +161,11 @@ class ClassificationRuleUpdate(ClassificationRuleBase):
     pass
 
 
+class ClassificationRuleValidate(BaseModel):
+    pattern: str
+    is_regex: bool = False
+
+
 class ClassificationRuleResponse(ClassificationRuleBase):
     id: int
     created_at: datetime
