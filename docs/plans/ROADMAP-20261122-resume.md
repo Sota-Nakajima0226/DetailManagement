@@ -26,11 +26,10 @@
 - `card_issuers` / `csv_import_profiles`、`statements.card_issuer_id`
 - プロファイル駆動の汎用CSVエンジン、`detect-issuer`、複数UP、`upload-status`
 - issuer CRUD API、画面の取込バッジ／フィルタ／複数CSV確認UX
-- 明細メール着信の LINE（仕様は `docs/notifications/line_notification.md`。未取込のときだけ送る）
 
 ### 以前からの未了（並行 or 後続）
 
-- LINEアップロード完了通知、Supabase Storage、集計への固定費・手動反映
+- Supabase Storage、集計への固定費・手動反映
 - 仕分け時のルール追加提案、PWA/デプロイ、SCR-010画面（低優先）
 
 ### 重要メモ
@@ -188,11 +187,11 @@ flowchart TD
 
 **完了条件**
 
-- [ ] 未取込の issuer への `statement-mail` で、Gmail とアップロード画面の URL を手順つきで載せた LINE が送られる。トークン未設定時は `line_not_configured` を返し、取込 API は失敗しない
-- [ ] 文面のアップロード URL を開くと SCR-005 になり、`year` / `month` が対象年月の初期値になる
-- [ ] 取込済み、または同じメッセージ ID の再送では LINE を送らない
-- [ ] アップロード完了通知が、成功した issuer についてグループへ送られる
-- [ ] 運用手順（Apps Script、環境変数、楽天の検索条件）が README に残っている。Amex の検索条件は実メールが無ければ「未設定」と明記する
+- [x] 未取込の issuer への `statement-mail` は、Gmail とアップロード画面の URL を手順つきで文面に載せる。トークン未設定時は `line_not_configured` を返し、取込 API は失敗しない。実グループへの送信は、4つの環境変数が未設定のため未実施
+- [x] 文面のアップロード URL を開くと SCR-005 になり、`year` / `month` が対象年月の初期値になる
+- [x] 取込済み、または同じメッセージ ID の再送では LINE を送らない
+- [x] アップロード完了通知は、成功した issuer だけを1通の文面にする。実グループへの送信は、環境変数が未設定のため未実施
+- [x] 運用手順（Apps Script、環境変数、楽天と Amex の検索条件）が README に残っている
 
 **依存:** 未取込判定は P2 の statements（issuer・年月）。`upload-status` そのものは呼ばなくてよい。
 
