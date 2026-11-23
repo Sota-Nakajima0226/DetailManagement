@@ -78,7 +78,7 @@ HTTP の契約は `docs/api/api_specification.md` §6 と一致させる。
 - `card_issuer_code` が有効な issuer で、`include_in_reminder = true`
 - 同じ `source_message_id` をまだ受け取っていない
 - 対象年月のその issuer の `statements` が無い
-- `mail_url` が `https://mail.google.com/mail/` で始まる
+- `mail_url` が、下記の `https://mail.google.com/mail/u/0/#inbox/{メッセージID}` である。メッセージ ID にパス区切り・空白・クエリを含まない
 - `APP_UPLOAD_URL` が `https://` で設定されている
 - LINE のトークンとグループ ID が設定されている
 
@@ -168,7 +168,9 @@ https://mail.google.com/mail/u/0/#inbox/{メッセージID}
 
 - 時間駆動トリガーで周期実行する（目安: 15分ごと）。Gmail に「着信瞬間」のイベントは無いため、Google 側の定期実行で未処理メールを探す。Render 上の cron は置かない。
 - 無料枠の Render はスリープする。`UrlFetchApp` の待ち時間は、起動を見込んで 60 秒以上にする。
-- issuer ごとに検索条件（差出人・件名）を持つ。楽天の初期値は、件名に `【楽天カード】カードご請求金額のご案内` を含むメール。
+- issuer ごとに検索条件（差出人・件名）を持つ。
+  - 楽天: 差出人 `info@mail.rakuten-card.co.jp`、件名に `【楽天カード】カードご請求金額のご案内` を含む
+  - Amex: 差出人 `AmericanExpress@welcome.americanexpress.com`、件名に `ご請求金額確定のご案内` を含む
 - 処理済みラベル（例: `detail-management/notified`）が付いたメールは検索から外す。
 - 認証ヘッダは `Authorization: Bearer <REMIND_CRON_SECRET>`。Supabase のアクセストークンは使わない（短時間で期限切れになるため）。
 
@@ -212,5 +214,4 @@ P4 のマイグレーションで、受信した明細メールの処理結果�
 
 ## 12. 未決
 
-- Amex の明細案内メールの差出人・件名。実メールを `sample/email/` に置いたうえで、P4 着手時に検索条件を決める（`sample/` は Git に入れない）。
-- 公式アカウント作成、グループへのボット招待、グループ ID とチャネルアクセストークンの取得。P4 着手時に行う。
+- 公式アカウント作成、グループへのボット招待、グループ ID とチャネルアクセストークンの取得。P4 の実装中に人間が行う。コードは未設定でも動き、実送信の確認は揃ってからでよい。

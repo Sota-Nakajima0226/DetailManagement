@@ -471,7 +471,7 @@ CSVファイル（複数可）
 ```
 
 - `year` / `month` は任意。省略時は Asia/Tokyo の今日。`force`（任意、既定 `false`）が `true` のときは取込済みでも送る。同じ `source_message_id` は再送しない。
-- `mail_url` は `https://mail.google.com/mail/` で始まること。それ以外は 400。
+- `mail_url` は `https://mail.google.com/mail/u/0/#inbox/{メッセージID}` だけを許す。`{メッセージID}` はパス区切り・空白・クエリを含まない。それ以外は 400。
 - レスポンス例:
 
 ```json
@@ -484,4 +484,4 @@ CSVファイル（複数可）
 }
 ```
 
-- 200 の `skip_reason` は `already_uploaded` / `duplicate_message` / `issuer_excluded` / `line_not_configured` のいずれか、または送ったとき `null`。200 は再送不要。issuer 不明・URL 不正・年月不正は 400。
+- 200 の `skip_reason` は `already_uploaded` / `duplicate_message` / `issuer_excluded` / `line_not_configured` / `upload_url_not_configured` のいずれか、または送ったとき `null`。`upload_url_not_configured` は `APP_UPLOAD_URL` が未設定、またはクエリ無しの `https://` 基点でないとき。200 は再送不要。issuer 不明・URL 不正・年月不正は 400。
